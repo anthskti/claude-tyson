@@ -60,36 +60,6 @@ export const BotTick = __t.object("BotTick", {
 });
 export type BotTick = __Infer<typeof BotTick>;
 
-export const CoachCue = __t.object("CoachCue", {
-  id: __t.u64(),
-  matchId: __t.u64(),
-  cueId: __t.string(),
-  atMs: __t.u32(),
-  persona: __t.string(),
-  trigger: __t.string(),
-  text: __t.string(),
-  priority: __t.string(),
-  source: __t.string(),
-  evidence: __t.string(),
-  tactic: __t.string(),
-});
-export type CoachCue = __Infer<typeof CoachCue>;
-
-export const CoachEffect = __t.object("CoachEffect", {
-  id: __t.u64(),
-  matchId: __t.u64(),
-  cueId: __t.string(),
-  appliedAtMs: __t.u32(),
-  evaluatedAtMs: __t.u32(),
-  outcome: __t.string(),
-  nextDecision: __t.string(),
-  beforeHitRate: __t.f32(),
-  afterHitRate: __t.f32(),
-  confidence: __t.f32(),
-  notes: __t.string(),
-});
-export type CoachEffect = __Infer<typeof CoachEffect>;
-
 export const FightMatch = __t.object("FightMatch", {
   id: __t.u64(),
   mode: __t.string(),

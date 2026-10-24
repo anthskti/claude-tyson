@@ -38,8 +38,6 @@ import ApplyStrategyUpdateReducer from "./apply_strategy_update_reducer";
 import ForfeitReducer from "./forfeit_reducer";
 import JoinPvpQueueReducer from "./join_pvp_queue_reducer";
 import LeavePvpQueueReducer from "./leave_pvp_queue_reducer";
-import PostCoachCueReducer from "./post_coach_cue_reducer";
-import PostCoachEffectReducer from "./post_coach_effect_reducer";
 import SetNameReducer from "./set_name_reducer";
 import StartBotMatchReducer from "./start_bot_match_reducer";
 import SubmitFightAnalysisReducer from "./submit_fight_analysis_reducer";
@@ -51,8 +49,6 @@ import UpdatePoseReducer from "./update_pose_reducer";
 // Import all table schema definitions
 import AttackRow from "./attack_table";
 import BotStrategyRow from "./bot_strategy_table";
-import CoachCueRow from "./coach_cue_table";
-import CoachEffectRow from "./coach_effect_table";
 import FightMatchRow from "./fight_match_table";
 import FightResultRow from "./fight_result_table";
 import FightWindowRow from "./fight_window_table";
@@ -90,34 +86,6 @@ const tablesSchema = __schema({
       { name: 'bot_strategy_match_id_key', constraint: 'unique', columns: ['matchId'] },
     ],
   }, BotStrategyRow),
-  coachCue: __table({
-    name: 'coach_cue',
-    indexes: [
-      { accessor: 'id', name: 'coach_cue_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-      { accessor: 'matchId', name: 'coach_cue_match_id_idx_btree', algorithm: 'btree', columns: [
-        'matchId',
-      ] },
-    ],
-    constraints: [
-      { name: 'coach_cue_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, CoachCueRow),
-  coachEffect: __table({
-    name: 'coach_effect',
-    indexes: [
-      { accessor: 'id', name: 'coach_effect_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-      { accessor: 'matchId', name: 'coach_effect_match_id_idx_btree', algorithm: 'btree', columns: [
-        'matchId',
-      ] },
-    ],
-    constraints: [
-      { name: 'coach_effect_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, CoachEffectRow),
   fightMatch: __table({
     name: 'fight_match',
     indexes: [
@@ -212,8 +180,6 @@ const reducersSchema = __reducers(
   __reducerSchema("forfeit", ForfeitReducer),
   __reducerSchema("join_pvp_queue", JoinPvpQueueReducer),
   __reducerSchema("leave_pvp_queue", LeavePvpQueueReducer),
-  __reducerSchema("post_coach_cue", PostCoachCueReducer),
-  __reducerSchema("post_coach_effect", PostCoachEffectReducer),
   __reducerSchema("set_name", SetNameReducer),
   __reducerSchema("start_bot_match", StartBotMatchReducer),
   __reducerSchema("submit_fight_analysis", SubmitFightAnalysisReducer),

@@ -7,10 +7,6 @@ import { poseOf, type Body, type CvProvider, type Guard, type Observation, type 
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView } from './net/server';
 import { Hud, type HudState } from './hud';
-import { LiveCoach } from '../../coach/liveCoach';
-import { createCoachAudio } from '../../coach/browserAudio';
-import { attackToRawEvent, matchToFightRow } from './coachBridge';
-import type { Capability } from '../../shared/contracts';
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -54,40 +50,6 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Coach ─────────────────────────────────────────────────────────────────
-
-// SimulatedCvProvider = keyboard sim → punch types + guard + dodge + lean.
-const COACH_CAPS: Capability[] = ['punch_types', 'guard', 'dodge', 'lean'];
-
-const coachAudio = createCoachAudio({ ttsUrl: '/api/tts' });
-let coach: LiveCoach | undefined;
-let coachMatchId = '';
-
-function ensureCoach(matchId: string) {
-  if (coach && coachMatchId === matchId) return;
-  coachMatchId = matchId;
-  coach = new LiveCoach({
-    fightId: matchId,
-    capabilities: COACH_CAPS,
-    wallNow: () => performance.now(),
-    requestCoach: async (req) => {
-      const res = await fetch('/api/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
-      });
-      return res.json();
-    },
-    play: (cue) => coachAudio.play(cue),
-    stop: () => coachAudio.stop(),
-    onCaption: (cue, info) => {
-      hud.toast(`[coach] ${cue.text}`, 'info');
-      console.log(`[coach:${info.source}] ${cue.text}`);
-    },
-    log: (m) => console.log('[coach]', m),
-  });
-}
-
 // ─── Game state ────────────────────────────────────────────────────────────
 
 const hudState: HudState = { server: 'connecting', tracking: 'calibrating', queued: false };
@@ -114,10 +76,6 @@ const server = new GameServer({
   },
   onAttackResolved(atk, v) {
     if (atk.result === 'cancelled') return;
-    // Feed resolved attack to coach before UI updates.
-    if (coach && coachMatchId === String(v.match.id)) {
-      coach.ingest([attackToRawEvent(atk, v.match, v.me)]);
-    }
     const counter = atk.counter && atk.result !== 'dodged' ? ' · COUNTER' : '';
     if (atk.attackerSlot === v.me.slot) {
       if (v.match.mode === 'bot') opponent.showDefense(atk.defenderBody as Body, atk.defenderGuard);
@@ -156,10 +114,6 @@ function refresh() {
   hudState.profile = server.profile();
   hudState.queued = server.inQueue();
   hud.render(hudState);
-  // Start coach when a bot match goes active.
-  if (view?.match.status === 'active' && view.match.mode === 'bot') {
-    ensureCoach(String(view.match.id));
-  }
 }
 
 // ─── CV input ──────────────────────────────────────────────────────────────
@@ -227,11 +181,6 @@ renderer.setAnimationLoop(() => {
   opponent.update(dt, Date.now());
   gloves.update(dt);
   hud.tick(view);
-  // Coach: update fight row snapshot + pump scheduler.
-  if (coach && view && coachMatchId === String(view.match.id)) {
-    coach.update(matchToFightRow(view.match, view.me, view.opponent));
-    coach.tick();
-  }
   renderer.render(scene, camera);
 });
 
@@ -240,7 +189,6 @@ return () => {
   renderer.setAnimationLoop(null);
   window.removeEventListener('resize', resize);
   cv.stop();
-  coachAudio.stop();
   server.close();
   hud.dispose();
   renderer.dispose();

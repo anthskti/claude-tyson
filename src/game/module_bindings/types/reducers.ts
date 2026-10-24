@@ -10,8 +10,6 @@ import ApplyStrategyUpdateReducer from "../apply_strategy_update_reducer";
 import ForfeitReducer from "../forfeit_reducer";
 import JoinPvpQueueReducer from "../join_pvp_queue_reducer";
 import LeavePvpQueueReducer from "../leave_pvp_queue_reducer";
-import PostCoachCueReducer from "../post_coach_cue_reducer";
-import PostCoachEffectReducer from "../post_coach_effect_reducer";
 import SetNameReducer from "../set_name_reducer";
 import StartBotMatchReducer from "../start_bot_match_reducer";
 import SubmitFightAnalysisReducer from "../submit_fight_analysis_reducer";
@@ -22,8 +20,6 @@ export type ApplyStrategyUpdateParams = __Infer<typeof ApplyStrategyUpdateReduce
 export type ForfeitParams = __Infer<typeof ForfeitReducer>;
 export type JoinPvpQueueParams = __Infer<typeof JoinPvpQueueReducer>;
 export type LeavePvpQueueParams = __Infer<typeof LeavePvpQueueReducer>;
-export type PostCoachCueParams = __Infer<typeof PostCoachCueReducer>;
-export type PostCoachEffectParams = __Infer<typeof PostCoachEffectReducer>;
 export type SetNameParams = __Infer<typeof SetNameReducer>;
 export type StartBotMatchParams = __Infer<typeof StartBotMatchReducer>;
 export type SubmitFightAnalysisParams = __Infer<typeof SubmitFightAnalysisReducer>;

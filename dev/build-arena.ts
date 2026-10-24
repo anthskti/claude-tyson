@@ -1,5 +1,4 @@
-// Builds dev/arena.html: a single file that runs with the offline coach + built-in voice.
-// For real Claude + Cartesia, run `bun dev/server.ts` instead.
+// Builds dev/arena.html as a single-file standalone arena.
 const built = await Bun.build({ entrypoints: [`${import.meta.dir}/arena.ts`], minify: true, target: "browser" });
 if (!built.success) { console.error(built.logs); process.exit(1); }
 const js = await built.outputs[0].text();

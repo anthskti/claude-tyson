@@ -6,9 +6,7 @@
 // So the player's capabilities are ["punch_coarse", "dodge", "lean"]; no guard, no punch types.
 
 import type { Input } from "../engine/engine";
-import type { Capability } from "../shared/contracts";
 
-export const CV_KIT_CAPABILITIES: Capability[] = ["punch_coarse", "dodge", "lean"];
 
 // Field names exactly as documented; unknown extra fields are tolerated.
 export interface CvObservation {

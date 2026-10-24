@@ -49,7 +49,7 @@ test("fight runs end to end through the reducers", () => {
   expect(() => h.withReducerTx(intruder, (ctx) => (mod.act as any)(ctx, { fightId: fight.id, action: "jab", eventId: "" }))).toThrow();
 });
 
-test("coach lines, pause, lean and duplicate CV events through the reducers", () => {
+test("pause, lean and duplicate CV events through the reducers", () => {
   const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
   const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
   const auth = TestAuth.fromJwtPayload(
@@ -85,20 +85,4 @@ test("coach lines, pause, lean and duplicate CV events through the reducers", ()
   expect(types).toContain("pause");
   expect(types).toContain("resume");
 
-  h.withReducerTx(auth, (ctx) => (mod.postCoachCue as any)(ctx, {
-    fightId: id, cueId: "c1", atMs: 5000, persona: "coach", trigger: "proactive", text: "Change your rhythm.",
-    priority: "normal", source: "claude", evidence: JSON.stringify(["3 blocked"]), tactic: "change_rhythm",
-  }));
-  h.withReducerTx(auth, (ctx) => (mod.postCoachEffect as any)(ctx, {
-    fightId: id, cueId: "c1", appliedAtMs: 5000, evaluatedAtMs: 15000, outcome: "improved", nextDecision: "keep",
-    beforeHitRate: 0.2, afterHitRate: 0.5, confidence: 0.6, notes: "Hit rate 20% -> 50%.",
-  }));
-  expect([...h.db.coachCue.iter()].map((c) => c.text)).toEqual(["Change your rhythm."]);
-  expect([...h.db.coachEffect.iter()][0].outcome).toBe("improved");
-
-  const stranger = TestAuth.fromJwtPayload(JSON.stringify({ iss: "localhost", sub: "x", iat: 0, exp: 9999999999 }), ConnectionId.random());
-  expect(() => h.withReducerTx(stranger, (ctx) => (mod.postCoachCue as any)(ctx, {
-    fightId: id, cueId: "c2", atMs: 1, persona: "coach", trigger: "proactive", text: "spam",
-    priority: "normal", source: "claude", evidence: "[]", tactic: "",
-  }))).toThrow();
 });

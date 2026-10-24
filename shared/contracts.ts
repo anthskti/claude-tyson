@@ -2,10 +2,8 @@
  * Claude Tyson — shared wire contracts, v1.
  * Framework-independent TypeScript; import into Next.js and the SpacetimeDB module.
  *
- * v1.1 (coach integration): SpacetimeDB is the source of truth for the fight (team diagram:
- * "SPACETIMEDB - Source of Truth"), so "Convex" below now reads "SpacetimeDB". All other
- * changes are ADDITIVE and marked `v1.1`: optional fields or new union members only,
- * so v1 producers/consumers keep compiling. Adapter: coach/adapter.ts (engine/DB rows -> these types).
+ * SpacetimeDB is the source of truth for the fight. This file is a design contract;
+ * it is not generated from the database schema.
  * Numbers with suffix 01 must be validated/clamped to [0, 1] at runtime.
  * atMs/windowStartMs/windowEndMs are elapsed milliseconds since the fight started,
  * NOT Unix timestamps. Wall-clock fields explicitly end in UnixMs.
@@ -28,9 +26,7 @@ export type TargetZone = "head" | "body";
 export type ComboId = "jab_cross" | "double_jab" | "jab_hook" | "hook_uppercut";
 export type InputSource = "pose" | "keyboard" | "replay";
 
-/** v1.1: what the current input provider can actually detect (INTEGRATION_CONTRACT §2B, §5).
- * The CV kit today: punch_left/right (coarse), dodge/lean. Keyboard adds punch types + guard.
- * Coach and analytics must only talk about supported signals ("left-hand attempts", not "jabs"). */
+/** What the current input provider can detect (INTEGRATION_CONTRACT §2B, §5). */
 export type Capability = "punch_coarse" | "punch_types" | "dodge" | "lean" | "guard";
 
 interface FightStamped {
@@ -110,7 +106,7 @@ export type CombatEvent =
       priorStrategyId?: StrategyId;
     });
 
-/** 3) Live game state. Built from the SpacetimeDB `fight` row (coach/adapter.ts toFightSnapshot). */
+/** 3) Live game state. Built from the authoritative SpacetimeDB match state. */
 export interface FightSnapshot extends FightStamped {
   status: FightStatus;
   roundTimeRemainingMs: number;
@@ -254,10 +250,9 @@ export interface StrategyUpdate {
   preferredCombo?: ComboId;
   validForMs: number;
   reasonForChange: string;
-  opponentTaunt?: string; // optional separate Cartesia voice cue
 }
 
-/** 8) Re-evaluate in the next matched time window; don't claim causal proof. */
+/** 8) Re-evaluate an opponent adjustment in a later matched time window. */
 export interface AdaptationResult {
   schemaVersion: 1;
   fightId: FightId;
@@ -282,53 +277,7 @@ export interface AdaptationResult {
   notes?: string;
 }
 
-/** 9) Two different voices and permissions. Coach sees observable game state, not hidden private strategy. */
-export interface CoachRequest {
-  schemaVersion: 1;
-  requestId: string;
-  fightId: FightId;
-  atMs: number;
-  trigger: "proactive" | "player_question" | "round_break" | "fight_end";
-  transcript?: string; // STT text only for question requests; never store mic audio by default
-  followUpToCueId?: string; // links a question to the coach line that prompted it
-  player: FighterStats;
-  opponent: FighterStats;
-  observableOpponent: {
-    guardHeight01: Normalized01;
-    recentPunches: PunchType[];
-    perceivedOpenings: TargetZone[];
-  };
-  previousCoachLines: string[]; // small bounded history for non-repetition
-  capabilities?: Capability[]; // v1.1: coach only advises on supported signals
-  playerStyle?: StyleEvidence; // v1.1: e.g. guard_drops, left_biased
-  window?: { startMs: number; endMs: number }; // v1.1: stats above cover this window
-  fightState?: { playerHealth: number; opponentHealth: number; playerStamina01: Normalized01; roundTimeRemainingMs: number }; // v1.1
-}
-
-export interface VoiceCue {
-  cueId: string;
-  fightId: FightId;
-  atMs: number;
-  persona: "coach" | "opponent";
-  trigger: "proactive" | "player_question" | "adaptation" | "round_break" | "fight_end";
-  text: string; // both caption and Cartesia speech source
-  priority: "low" | "normal" | "urgent";
-  delivery: "queue" | "interrupt" | "drop_if_busy";
-  voiceId: string; // configured Cartesia voice identifier; not an auth secret
-  cooldownMs: number;
-}
-
-export interface CoachResponse {
-  schemaVersion: 1;
-  requestId: string;
-  advice: string;
-  referencedEvidence: string[];
-  cue?: VoiceCue;
-  suggestedTactic?: "attack_head" | "attack_body" | "mix_punches" | "defend" | "change_rhythm";
-  source?: "claude" | "offline"; // v1.1: offline = local fallback when Claude is unavailable
-}
-
-/** 10) Persist in SpacetimeDB. Do NOT embed ever-growing battleHistory arrays in a player doc. */
+/** 9) Persist in SpacetimeDB. Do NOT embed ever-growing battleHistory arrays in a player doc. */
 export interface PlayerProfile {
   playerId: PlayerId;
   displayName: string;
@@ -361,8 +310,6 @@ export interface FightRecord {
 /** SpacetimeDB tables (spacetimedb/src/index.ts), replacing the v1 Convex table list:
  * fight          live match session: health, stamina, phases, timer, status (authoritative)
  * combat_event   append-only CombatEvent log incl. guard_check / tracking_pause (index fightId)
- * coach_cue      VoiceCue rows: captions for the player and spectators (index fightId)
- * coach_effect   AdaptationResult rows for coaching (strategyId = cueId) (index fightId)
  * fight_tick     scheduled 50ms tick driving the server-side opponent (private)
- * Not stored: webcam frames, per-frame landmarks, Cartesia audio.
+ * Not stored: webcam frames or per-frame landmarks.
  */

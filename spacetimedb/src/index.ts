@@ -8,7 +8,6 @@
 //   4. AI adaptation       — fightWindow rows every ~6 s feed the strategist; applyStrategyUpdate
 //                            validates/clamps the returned tuning for the bot controller
 //   5. Persistence         — fightResult + fighterProfile updated when the match ends
-//   6. Coach               — coachCue + coachEffect rows (spectators see captions; effect measurement)
 
 import {
   schema,
@@ -287,44 +286,6 @@ const fightResult = table(
   }
 );
 
-// ─── Coach tables (v1.1) ───────────────────────────────────────────────────
-
-// Coach lines — spectator phones see these as captions.
-const coachCue = table(
-  { name: 'coach_cue', public: true },
-  {
-    id: t.u64().primaryKey().autoInc(),
-    matchId: t.u64().index('btree'),
-    cueId: t.string(),
-    atMs: t.u32(),
-    persona: t.string(), // 'coach' | 'opponent'
-    trigger: t.string(), // 'proactive' | 'fight_end' | ...
-    text: t.string(),
-    priority: t.string(),
-    source: t.string(), // 'rules' | 'claude' | 'offline'
-    evidence: t.string(), // JSON string[]
-    tactic: t.string(),
-  }
-);
-
-// "Did the advice help?" — AdaptationResult with cueId as strategyId.
-const coachEffect = table(
-  { name: 'coach_effect', public: true },
-  {
-    id: t.u64().primaryKey().autoInc(),
-    matchId: t.u64().index('btree'),
-    cueId: t.string(),
-    appliedAtMs: t.u32(),
-    evaluatedAtMs: t.u32(),
-    outcome: t.string(), // 'improved' | 'worsened' | 'inconclusive'
-    nextDecision: t.string(), // 'keep' | 'adjust' | 'revert'
-    beforeHitRate: t.f32(), // -1 = not measurable
-    afterHitRate: t.f32(),
-    confidence: t.f32(),
-    notes: t.string(),
-  }
-);
-
 const spacetimedb = schema({
   player,
   fighterProfile,
@@ -340,8 +301,6 @@ const spacetimedb = schema({
   windowTimer,
   fightWindow,
   fightResult,
-  coachCue,
-  coachEffect,
 });
 export default spacetimedb;
 
@@ -391,15 +350,6 @@ function requireMyFighter(ctx: Ctx, matchId: bigint): { match: Match; me: Fighte
   const me = fightersOf(ctx, matchId).find(f => f.identity?.equals(ctx.sender));
   if (!me) throw new SenderError('not a fighter in this match');
   return { match, me };
-}
-
-// For coach tables: the match may already be finished (fight_end cue).
-function requireFighter(ctx: Ctx, matchId: bigint): Match {
-  const match = ctx.db.fightMatch.id.find(matchId);
-  if (!match) throw new SenderError('match not found');
-  const fighter = fightersOf(ctx, matchId).find(f => f.identity?.equals(ctx.sender));
-  if (!fighter) throw new SenderError('not your match');
-  return match;
 }
 
 function ensureProfile(ctx: Ctx, who: Identity) {
@@ -991,34 +941,5 @@ export const submitFightAnalysis = spacetimedb.reducer(
     ctx.db.fightResult.matchId.update({ ...result, analysis: text });
     const p = ensureProfile(ctx, ctx.sender);
     ctx.db.fighterProfile.identity.update({ ...p, lastAnalysis: text, updatedAt: ctx.timestamp });
-  }
-);
-
-// ─── 6. Coach (v1.1) ───────────────────────────────────────────────────────
-
-/** The player's client posts each coach line it speaks, so spectators see the same captions. */
-export const postCoachCue = spacetimedb.reducer(
-  {
-    matchId: t.u64(), cueId: t.string(), atMs: t.u32(), persona: t.string(), trigger: t.string(),
-    text: t.string(), priority: t.string(), source: t.string(), evidence: t.string(), tactic: t.string(),
-  },
-  (ctx, a) => {
-    requireFighter(ctx, a.matchId);
-    if (!a.text || a.text.length > 240) throw new SenderError('bad text');
-    if (a.evidence.length > 600) throw new SenderError('evidence too long');
-    if (!['rules', 'claude', 'offline'].includes(a.source)) throw new SenderError('bad source');
-    ctx.db.coachCue.insert({ id: 0n, ...a, cueId: a.cueId.slice(0, 120) });
-  }
-);
-
-export const postCoachEffect = spacetimedb.reducer(
-  {
-    matchId: t.u64(), cueId: t.string(), appliedAtMs: t.u32(), evaluatedAtMs: t.u32(), outcome: t.string(),
-    nextDecision: t.string(), beforeHitRate: t.f32(), afterHitRate: t.f32(), confidence: t.f32(), notes: t.string(),
-  },
-  (ctx, a) => {
-    requireFighter(ctx, a.matchId);
-    if (!['improved', 'worsened', 'inconclusive'].includes(a.outcome)) throw new SenderError('bad outcome');
-    ctx.db.coachEffect.insert({ id: 0n, ...a, cueId: a.cueId.slice(0, 120), notes: a.notes.slice(0, 300) });
   }
 );

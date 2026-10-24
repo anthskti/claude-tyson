@@ -1,40 +1,29 @@
-# Claude Tyson (Cal Hacks 13.0, SpacetimeDB track)
+# Claude Tyson
 
-Webcam Wii-Sports-style boxing vs a CPU opponent, with a live AI corner coach (Claude + Cartesia voice).
-Team: Anthony Pham (anthskti, 3D scene/animations), Hani (CV/MediaPipe kit), Yejia Shen (strategist/voice), Abdullah.
+Browser-based boxing game using Next.js, Three.js, Bun, and SpacetimeDB.
 Repo: github.com/anthskti/claude-tyson. Do not push without asking Abdullah.
 
-**Read `docs/PROJECT_CONTEXT.md` first**: the full plan, sponsor-track criteria, team diagram, Excalidraw
-ideas, both contracts, design decisions, status and the demo we're aiming for.
-Submission deadline: Devpost, Sunday Oct 25, 9:00 AM; live demo judging 10:30 AM.
+## Architecture
 
-## Architecture (see README.md, docs/architecture.webp)
-- SpacetimeDB is the source of truth for the fight: `spacetimedb/src/index.ts` (tables fight, combat_event,
-  coach_cue, coach_effect, fight_tick; reducers startFight, act, tick (50ms scheduled), forfeit, postCoachCue, postCoachEffect).
-- `engine/engine.ts` is the pure deterministic combat engine (no deps, seeded RNG). It runs inside the module.
-  `spacetimedb/src/engine.ts` is a COPY: after editing engine/engine.ts run `./sync-engine.sh`.
-- `shared/contracts.ts` is the team's wire contract (v1 original in docs/contracts.v1.original.ts).
-  Changes must stay additive and be marked `v1.1`. `coach/adapter.ts` maps engine/DB rows to contract types.
-- `coach/` is the live coach: rules (instant) + Claude every ~10s via /api/coach + offline fallback,
-  scheduler (one voice at a time), effect measurement (AdaptationResult). `coach/liveCoach.ts` ties it together.
-- Inputs: `input/cvKit.ts` (Hani's kit `cv_sample` messages, per docs/INTEGRATION_CONTRACT.md),
-  `input/keyboard.ts`, `input/motion.ts` (browser MediaPipe alternative).
-- `src/game/` is the fight scene and SpacetimeDB client (`src/game/fightClient.ts`, bindings in `src/game/module_bindings`). `src/app/page.tsx` mounts it. `bun run dev` serves the fight at http://localhost:3001.
-
-## Rules that matter
-- Capabilities decide what the coach can say. CV kit = punch_coarse, dodge, lean (no punch types, no guard).
-  Keyboard = punch_types, guard, dodge, lean. Never coach body shots, strength, form.
-- Tracking lost pauses the fight; in-flight attacks are "unscorable" and excluded from all stats.
-- API keys only server-side (.env.local, see .env.example).
+- `src/app/` contains the Next.js page and API routes.
+- `src/game/` contains browser rendering, HUD, CV provider, and SpacetimeDB client.
+- `spacetimedb/src/` owns match state, validation, combat resolution, profiles, and persistence.
+- CV processing stays on the client. Send classified actions and tracking state; never send frames or raw landmark streams.
+- Client animation may respond immediately, but server state decides accepted actions, damage, health, KO, and results.
+- `input/` and `engine/` also support the standalone local arena in `dev/`; that arena is not the authoritative online game.
+- Adaptive opponent strategy remains separate from live coaching. Model output may adjust bounded tactics, never health, damage, hit outcomes, or winner.
 
 ## Commands
-- `bun run test` (bun tests for engine/input/coach, then vitest for the SpacetimeDB module; run `bun install` in spacetimedb/ first)
-- `bun dev/server.ts` -> http://localhost:8787 arena with coach (offline without keys)
-- `bun dev/build-arena.ts` -> rebuild standalone dev/arena.html
-- SpacetimeDB: `spacetime start`, `./sync-engine.sh`, `spacetime publish --server local --module-path spacetimedb claude-tyson`,
-  `spacetime generate --lang typescript --out-dir src/game/module_bindings --module-path spacetimedb`
-- Windows: run sync-engine.sh from Git Bash, or copy engine/engine.ts to spacetimedb/src/engine.ts manually.
 
-## Not done yet
-- `src/game/fightClient.ts` hasn't been typechecked against generated bindings (needs the spacetime CLI).
-- Claude strategist (OpponentTuning patches via a reducer) is stubbed: applyTuningPatch exists in the engine.
+- `bun run dev` serves Next.js at http://localhost:3001.
+- `bun run build` builds the Next.js app.
+- `bun run test` runs the engine/input tests and SpacetimeDB module tests.
+- `bun run build:arena` builds the standalone arena; `bun run arena` serves it at http://localhost:8787.
+- Local database: `spacetime start`, then `spacetime publish --anonymous --server local --module-path spacetimedb claude-tyson`.
+- Regenerate bindings after schema changes with `spacetime generate --lang typescript --out-dir src/game/module_bindings --module-path spacetimedb`.
+
+## Current notes
+
+- The live game currently uses `SimulatedCvProvider`; connect the real CV provider through the same local input boundary before a webcam demo.
+- The standalone arena uses its own local engine and is for input/animation experiments.
+- `.env.example` contains the local SpacetimeDB host and database settings.
