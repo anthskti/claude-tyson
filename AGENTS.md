@@ -8,8 +8,8 @@ Claude Tyson is a browser-based boxing game with two match modes: human vs. huma
 
 ## Source of truth
 
-- Treat `contracts-v4.ts` as the current **design contract** until the repository adopts a newer agreed version. These are TypeScript interfaces, **not** generated SpacetimeDB schema definitions.
-- Treat `schema-diagram.md` as a conceptual reference; where it differs from `contracts-v4.ts`, follow v4 and flag the discrepancy.
+- Treat `CONTRACTS.ts` as the current **design contract** until the repository adopts a newer agreed version. These are TypeScript interfaces, **not** generated SpacetimeDB schema definitions.
+- Treat `schema-diagram.md` as a conceptual reference; where it differs from `CONTRACTS.ts`, follow v4 and flag the discrepancy.
 - Read the actual repository, installed dependency versions, and package scripts before making assumptions about paths, APIs, or commands.
 - Keep any shared contracts, server schema, reducers, and client consumers consistent. Never silently change wire contracts.
 

@@ -37,8 +37,7 @@ scene.add(camera);
 const gloves = new PlayerGloves();
 camera.add(gloves.root);
 
-const opponent = new Boxer(0x0984e3);
-opponent.root.position.z = -0.75;
+const opponent = new Boxer();
 scene.add(opponent.root);
 
 function resize() {
@@ -215,6 +214,9 @@ renderer.setAnimationLoop(() => {
   if (pvpOpponent) {
     opponent.setPose(pvpOpponent.bodyState as Body, pvpOpponent.leftGuard as Guard, pvpOpponent.rightGuard as Guard);
   }
+
+  if (view && view.opponent.health <= 0) opponent.knockout();
+  else opponent.standUp();
 
   opponent.update(dt, Date.now());
   gloves.update(dt);
