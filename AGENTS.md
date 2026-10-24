@@ -8,8 +8,8 @@ Claude Tyson is a browser-based boxing game with two match modes: human vs. huma
 
 ## Source of truth
 
-- Treat `CONTRACTS.ts` as the current **design contract** until the repository adopts a newer agreed version. These are TypeScript interfaces, **not** generated SpacetimeDB schema definitions.
-- Treat `schema-diagram.md` as a conceptual reference; where it differs from `CONTRACTS.ts`, follow v4 and flag the discrepancy.
+- Treat `CONTRACTS.md` as the current **design contract** until the repository adopts a newer agreed version. These are TypeScript shapes, **not** generated SpacetimeDB schema definitions.
+- Treat `schema-diagram.md` as a conceptual reference; where it differs from `CONTRACTS.md`, follow v4 and flag the discrepancy.
 - Read the actual repository, installed dependency versions, and package scripts before making assumptions about paths, APIs, or commands.
 - Keep any shared contracts, server schema, reducers, and client consumers consistent. Never silently change wire contracts.
 
@@ -25,7 +25,7 @@ Claude Tyson is a browser-based boxing game with two match modes: human vs. huma
 ## Required gameplay scope
 
 - Modes: `pvp` and `adaptive_bot`; both use the **same** action vocabulary and combat resolution rules.
-- Actions: idle/guard, `block_start`, `block_end`, `dodge_start(left|right)`, `dodge_end`, jab, cross, left hook, right hook.
+- Actions: idle/guard, `block_start`, `block_end`, `dodge_start(left|right)`, `dodge_end`, left straight, right straight, left hook, right hook. Straights are named by anatomical hand; they still use the jab and cross combat stats, and the HUD may say jab and cross.
 - Dodges are inferred from **nose displacement relative to shoulders** using MediaPipe, with calibrated thresholds and debounce/hysteresis where needed. Anatomical left/right must be consistent despite mirrored camera preview.
 - No world-position movement, walking, ducking, uppercut, combos, coach, or live commentary in the MVP. Idle animation may include visual stepping, but has no gameplay displacement.
 - KO is terminal. Once health reaches zero, stop accepting combat actions and play knockout animation once; no get-up mechanic.

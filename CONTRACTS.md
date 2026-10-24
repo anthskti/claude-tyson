@@ -11,7 +11,9 @@
 
 export type MatchStatus = "waiting" | "ready" | "active" | "finished" | "cancelled";
 export type MatchMode = "pvp" | "adaptive_bot";
-export type PunchType = "jab" | "cross" | "left_hook" | "right_hook";
+// Straights and hooks are named by anatomical hand. Left/right straight are distinct
+// moves; they do not expose jab/cross as gameplay action names.
+export type PunchType = "left_straight" | "right_straight" | "left_hook" | "right_hook";
 export type FightAction =
 | { kind: "punch"; punch: PunchType; speed01?: number }
 | { kind: "block_start" }

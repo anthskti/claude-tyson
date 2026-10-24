@@ -13,7 +13,7 @@ classified inputs to the server, never webcam frames.
 | `spacetimedb/src/` | Database schema, reducers, and authoritative combat |
 | `engine/`, `input/` | Pure combat/input utilities and standalone arena support |
 | `dev/` | Standalone local arena |
-| `shared/` | Design contracts |
+| `CONTRACTS.md` | Design contract for actions and combat shapes |
 
 ## Run locally
 

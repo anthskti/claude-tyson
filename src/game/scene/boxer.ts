@@ -33,7 +33,7 @@ function punchOffset(type: AnyPunch, s: number, reach: number) {
   }
 }
 
-/** Live client punch names → design-contract slots. Uppercut has no clip. */
+/** `jab` (left straight) uses the jab slot; `straight` (right straight) uses the cross slot. Uppercut has no clip. */
 function punchSlot(hand: Hand, type: AnyPunch): ClipSlot {
   if (type === 'hook') return hand === 'left' ? 'left_hook' : 'right_hook';
   if (type === 'straight' || (type === 'uppercut' && hand === 'right')) return 'cross';
