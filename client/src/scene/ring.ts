@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-// Placeholder ring built from primitives. Swap in the Blender scene by exporting it
-// as glTF binary to client/public/models/ring.glb — loadRing() prefers that file and
-// falls back to this one when it's missing.
+// boxing_ring.glb is the arena. Its Arena.Floor quad is authored about 2.8 m up,
+// so loadRing() shifts that surface to y = 0. The primitive ring is only the
+// load-failure fallback.
 //
 // Blender export conventions the game expects: +Y up, 1 unit = 1 m, canvas top at
 // y = 0, ring centred on the origin.
@@ -109,7 +109,33 @@ export function buildArena(scene: THREE.Scene) {
   }
 }
 
-export async function loadRing(url = '/models/ring.glb'): Promise<THREE.Object3D> {
+/** World-space Y of the Arena.Floor quad, the surface the bot stands on. */
+function canvasTopY(root: THREE.Object3D): number | null {
+  root.updateMatrixWorld(true);
+  let top: number | null = null;
+  const v = new THREE.Vector3();
+  root.traverse(obj => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const floor = mats.findIndex(m => m?.name === 'Arena.Floor');
+    if (floor < 0) return;
+    const pos = mesh.geometry.getAttribute('position');
+    const index = mesh.geometry.getIndex();
+    const group = mesh.geometry.groups.find(g => g.materialIndex === floor);
+    const start = group?.start ?? 0;
+    const count = group?.count ?? (index ? index.count : pos.count);
+    for (let i = start; i < start + count; i++) {
+      const vi = index ? index.getX(i) : i;
+      v.fromBufferAttribute(pos, vi);
+      mesh.localToWorld(v);
+      if (top === null || v.y > top) top = v.y;
+    }
+  });
+  return top;
+}
+
+export async function loadRing(url = '/boxing_ring.glb'): Promise<THREE.Object3D> {
   try {
     const gltf = await new GLTFLoader().loadAsync(url);
     gltf.scene.traverse(o => {
@@ -118,6 +144,8 @@ export async function loadRing(url = '/models/ring.glb'): Promise<THREE.Object3D
         o.receiveShadow = true;
       }
     });
+    const top = canvasTopY(gltf.scene);
+    if (top !== null) gltf.scene.position.y -= top;
     return gltf.scene;
   } catch {
     return buildPlaceholderRing();
