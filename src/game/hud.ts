@@ -53,7 +53,7 @@ export class Hud {
       <div class="bars">
         <div class="bar me"><span class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div><div class="track stamina"><div id="stamina-me" class="fill"></div></div></div>
         <div id="timer" class="timer">3:00</div>
-        <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div></div>
+        <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div><div class="track stamina"><div id="stamina-opp" class="fill"></div></div></div>
       </div>
       <div id="status" class="status"></div>
       <div id="menu" class="menu"></div>
@@ -180,6 +180,7 @@ export class Hud {
     el('hp-me').style.width = `${view ? Math.max(0, view.me.health / 10) : 100}%`;
     el('hp-opp').style.width = `${view ? Math.max(0, view.opponent.health / 10) : 100}%`;
     el('stamina-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.stamina)) : 100}%`;
+    el('stamina-opp').style.width = `${view ? Math.max(0, Math.min(100, view.opponent.stamina)) : 100}%`;
     let remaining = 180;
     if (active) {
       const endsMs = Number(view.match.endsAt.microsSinceUnixEpoch / 1000n);
