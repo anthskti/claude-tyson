@@ -25,7 +25,7 @@ function ready() {
   return a;
 }
 
-test("coarse punches map to left/right attacks with dedupe keys", () => {
+test("coarse punches map left and right straights onto jab and cross, with dedupe keys", () => {
   const a = ready();
   const out = a.push(sample({ x: 0, events: [{ eventId: "7", type: "punch_left" }, { eventId: "8", type: "punch_right" }] }), 66);
   expect(out).toEqual([

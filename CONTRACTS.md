@@ -11,9 +11,10 @@
 
 export type MatchStatus = "waiting" | "ready" | "active" | "finished" | "cancelled";
 export type MatchMode = "pvp" | "adaptive_bot";
-export type PunchType = "jab" | "cross" | "left_hook" | "right_hook";
+// Straights and hooks are named by anatomical hand; left/right straight are distinct moves.
+export type PunchType = "left_straight" | "right_straight" | "left_hook" | "right_hook";
 export type FightAction =
-| { kind: "punch"; punch: PunchType; speed01?: number }
+| { kind: "punch"; punch: PunchType }
 | { kind: "block_start" }
 | { kind: "block_end" }
 | { kind: "dodge_start"; direction: "left" | "right" }
@@ -89,8 +90,27 @@ slot: "a" | "b"; // Composite identity (matchId, slot).
 playerId?: string; // absent for bot.
 health: number;
 maxHealth: number;
+stamina: number; // Server-owned, 0..100; damage uses fixed punch values.
 state: "idle" | "attacking" | "blocking" | "dodging" | "hit" | "ko";
 stateStartedAtUnixMs: number;
 dodgeDirection?: "left" | "right";
 tracking: "ok" | "lost"; // AI always ok.
 activeAction?: FightAction;
+}
+
+// First-pass authoritative tuning. SpacetimeDB stores health and damage in
+// tenths of one health point (1000 health = 100.0 HP).
+export const COMBAT_RULES = {
+  maxHealth: 1000,
+  maxStamina: 100,
+  staminaRegenPerSec: 12,
+  blockDrainPerSec: 4,
+  dodgeCost: 20,
+  punchDamage: { left_straight: 5, right_straight: 13, left_hook: 10, right_hook: 10 },
+  punchStamina: { left_straight: 5, right_straight: 12, left_hook: 16, right_hook: 16 },
+  oppositeHookVsDodgeMultiplier: 1.5,
+} as const;
+
+// Block stops straights and hooks beat block. Either dodge avoids straights and
+// its same-side hook. The opposite-side hook catches the dodge at 1.5x base.
+// Timing values remain provisional and live in spacetimedb/src/rules.ts.

@@ -3,6 +3,7 @@
 // Everything is measured in "shoulder widths" so it works at any distance from the webcam.
 
 import type { Input, Punch, DodgeDir } from "../engine/engine";
+import { enginePunchForStraight } from "./straights";
 
 export interface Landmark { x: number; y: number; z?: number; visibility?: number }
 
@@ -125,7 +126,7 @@ export class MotionEngine {
       } else if (inward > Math.max(0, up) * this.cfg.hookInwardRatio && inward > speed * 0.7) {
         punch = hand === "L" ? "hook_l" : "hook_r";
       } else {
-        punch = hand === "L" ? "jab" : "cross";
+        punch = enginePunchForStraight(hand === "L" ? "left_straight" : "right_straight");
       }
       this.lastPunch[hand] = t;
       h.length = 0;
