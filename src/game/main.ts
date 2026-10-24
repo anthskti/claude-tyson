@@ -15,6 +15,25 @@ import { CornerScene } from './cornerScene';
 import { AdaptationManager } from './adaptationManager';
 import { DebugLog } from './debugLog';
 import { pickLine } from './dialogue';
+import { GameAudio } from './audio';
+
+// ─── Player name + session helpers ─────────────────────────────────────────
+
+const PLAYER_NAME_KEY   = 'claude-tyson.player-name';
+const SAFETY_SHOWN_KEY  = 'claude-tyson.safety-shown'; // sessionStorage key
+
+function loadPlayerName(): string | null {
+  try { return localStorage.getItem(PLAYER_NAME_KEY); } catch { return null; }
+}
+function savePlayerName(name: string) {
+  try { localStorage.setItem(PLAYER_NAME_KEY, name); } catch {}
+}
+function safetyShownThisSession(): boolean {
+  try { return sessionStorage.getItem(SAFETY_SHOWN_KEY) === '1'; } catch { return false; }
+}
+function markSafetyShown() {
+  try { sessionStorage.setItem(SAFETY_SHOWN_KEY, '1'); } catch {}
+}
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -39,6 +58,7 @@ loadRing().then(ring => {
 const EYE = new THREE.Vector3(0, 1.62, 0.55);
 const BODY_WIDTH_M = 0.55; // metres per CV "body width" of lateral displacement
 const camera = new THREE.PerspectiveCamera(70, 1, 0.03, 100);
+camera.rotation.order = 'YXZ'; // FPS order: yaw→pitch→roll, prevents gimbal lock
 camera.position.copy(EYE);
 camera.lookAt(0, 1.5, -1);
 const BASE_PITCH = camera.rotation.x;
@@ -86,6 +106,7 @@ let shakeUntil = 0;
 let prevMatchId: string | undefined;
 let prevMatchStatus: string | undefined;
 let debriefShown = false;
+let debriefTimer = 0;
 let cinematicMode = false;
 let lowHpDialogueShown = false;
 let winningDialogueShown = false;
@@ -147,11 +168,15 @@ const server = new GameServer({
 const hud = new Hud({
   fightBot: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
-    beforeFight(() => server.startBotMatch());
+    hud.showVsScreen(hudState.playerName ?? 'FIGHTER', hudState.profile, () => {
+      beforeFight(() => server.startBotMatch());
+    }, renderer);
   },
   findPvp: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
-    beforeFight(() => server.joinPvp());
+    hud.showVsScreen(hudState.playerName ?? 'FIGHTER', hudState.profile, () => {
+      beforeFight(() => server.joinPvp());
+    }, renderer);
   },
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),
@@ -160,6 +185,14 @@ const hud = new Hud({
   reconnectCamera: () => bridge.reconnect(),
   cancelCalibration: () => endCalibration(false),
   skipCalibration: () => guardClassifier && endCalibration(true),
+  changeName: () => {
+    hud.showNameEntry((name) => {
+      savePlayerName(name);
+      hudState.playerName = name;
+      refresh();
+      hud.showWiiSafety(() => refresh());
+    });
+  },
 });
 
 const adaptationManager = new AdaptationManager({
@@ -186,11 +219,7 @@ const adaptationManager = new AdaptationManager({
   log: (msg) => debugLog.add('strategy', msg),
 });
 
-const cornerScene = new CornerScene({
-  scene,
-  camera,
-  onAnalysis: (text, source) => hud.showCornerAnalysis(text, source, () => cornerScene.exit()),
-});
+const cornerScene = new CornerScene({ scene, camera, renderer });
 window.addEventListener('keydown', (e) => { if (e.key === '`') debugLog.toggle(); });
 
 function refresh() {
@@ -208,6 +237,8 @@ function refresh() {
 
   if (status === 'active' && view?.match.mode === 'bot' && matchId !== prevMatchId) {
     debriefShown = false;
+    window.clearTimeout(debriefTimer);
+    hudState.debriefing = false;
     lowHpDialogueShown = false;
     winningDialogueShown = false;
     losingDialogueShown = false;
@@ -229,8 +260,10 @@ function refresh() {
     if (view && !cinematicMode) {
       const stars = won ? (view.me.health >= 700 ? 3 : view.me.health >= 350 ? 2 : 1) : 0;
       hud.showResultCard(won, reason, stars);
-      const snap = view; // capture for closure
-      window.setTimeout(() => {
+      hudState.debriefing = true;
+      const snap = view;
+      debriefTimer = window.setTimeout(() => {
+        hudState.debriefing = false;
         cinematicMode = true;
         hudState.cinematic = true;
         wheel.hide();
@@ -398,7 +431,34 @@ cv.start((obs, events) => {
 
 setInput(hudState.input);
 server.connect();
-refresh();
+
+// ─── Initial screen flow ────────────────────────────────────────────────────
+// name entry (first visit) → wii safety (once per session) → menu
+{
+  const savedName = loadPlayerName();
+  const showMenu = () => {
+    hudState.playerName = loadPlayerName() ?? undefined;
+    refresh();
+  };
+  const showSafety = () => {
+    markSafetyShown();
+    hud.showWiiSafety(showMenu);
+  };
+  if (!savedName) {
+    hud.showNameEntry((name) => {
+      savePlayerName(name);
+      hudState.playerName = name;
+      showSafety();
+    });
+  } else {
+    hudState.playerName = savedName;
+    if (!safetyShownThisSession()) {
+      showSafety();
+    } else {
+      showMenu();
+    }
+  }
+}
 
 // ─── Frame loop ────────────────────────────────────────────────────────────
 
@@ -406,7 +466,8 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const rawDt = Math.min(clock.getDelta(), 0.05);
   const t = performance.now();
-  const dt = rawDt * (t < slowmoUntil ? 0.22 : 1);
+  const slowT = t < slowmoUntil ? Math.max(0.1, (slowmoUntil - t) / 2200) : 1; // ramp from 0.1→1
+  const dt = rawDt * (t < slowmoUntil ? 0.1 + slowT * 0.3 : 1);
 
   // Corner scene owns camera during cinematic mode.
   const cinematic = cornerScene.update(dt);
@@ -414,6 +475,13 @@ renderer.setAnimationLoop(() => {
     cinematicMode = cinematic;
     hudState.cinematic = cinematic;
     hud.render(hudState); // show/hide menu immediately when cinematic state changes
+    if (!cinematic) {
+      // Snap camera back to ring-facing position — the corner scene leaves the
+      // camera at a corner position with a yaw that the main loop never
+      // resets, causing the opponent to appear off-screen to one side.
+      camera.position.copy(EYE);
+      camera.lookAt(0, 1.5, -1);
+    }
   }
 
   if (!cinematic) {
@@ -440,7 +508,14 @@ renderer.setAnimationLoop(() => {
   }
 
   if (view && view.opponent.health <= 0) {
-    if (!koFlashTriggered) { koFlashTriggered = true; slowmoUntil = t + 900; }
+    if (!koFlashTriggered) {
+      koFlashTriggered = true;
+      slowmoUntil = t + 2200; // 2.2s of slow-mo on KO
+      const vig = document.getElementById('vignette')!;
+      vig.classList.remove('hit', 'ko-flash');
+      void vig.offsetWidth;
+      vig.classList.add('ko-flash');
+    }
     opponent.knockout();
   } else {
     opponent.standUp();
@@ -460,6 +535,17 @@ renderer.setAnimationLoop(() => {
   opponent.update(dt, Date.now());
   gloves.update(dt);
   wheel.update(dt);
+
+  // Project Tyson's head to screen for Mii-style speech bubbles
+  if (view?.match.status === 'active' && !cinematic) {
+    const headW = opponent.root.position.clone();
+    headW.y += 2.1; // above head
+    headW.project(camera);
+    const sx = (headW.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+    const sy = (-(headW.y * 0.5) + 0.5) * renderer.domElement.clientHeight;
+    hud.setDialogueAnchor(sx, sy);
+  }
+
   hud.tick(view);
   renderer.render(scene, camera);
 });

@@ -3,6 +3,12 @@
 :root {
   /* Clash Royale x Claude palette */
   --navy:         #0d1b2e;
+  /* Aliases for compatibility */
+  --good:         #55dd22;
+  --warn:         #ffb800;
+  --dim:          #8899bb;
+  --panel:        rgba(12,22,42,0.92);
+  --blue:         #3a6ad4;
   --navy-mid:     #162540;
   --navy-panel:   rgba(12, 22, 42, 0.97);
   --gold:         #ffc820;
@@ -28,8 +34,8 @@
 }
 
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--navy); }
-#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-#hud { position: fixed; inset: 0; pointer-events: none; }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 #hud button, #hud .menu { pointer-events: auto; }
 
 /* ─── Cartoon text stroke helper ───────────────────────────────────────── */
@@ -74,12 +80,70 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--navy);
   box-shadow: 0 3px 8px rgba(0,0,0,0.5), inset 0 2px 4px rgba(0,0,0,0.6);
 }
 .bar.opp .track { display: flex; justify-content: flex-end; }
-.fill { height: 100%; transition: width 0.15s ease-out; }
-.bar.me .fill { background: var(--red); }
+.fill {
+  height: 100%; border-radius: 999px;
+  transition: width 0.2s cubic-bezier(0.25,0.46,0.45,0.94);
+  position: relative;
+}
+/* Shine overlay on health fills */
+.fill::after {
+  content: ''; position: absolute; inset: 0; border-radius: 999px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.0) 55%);
+}
+.bar.me .fill {
+  background: linear-gradient(90deg, var(--red-dark) 0%, #cc2211 40%, var(--red) 100%);
+  box-shadow: 0 0 10px rgba(238,51,34,0.55);
+}
 .bar.me .stamina { height: 5px; }
-.bar.me .stamina .fill { background: var(--good); }
-.bar.opp .fill { background: var(--blue); }
-.timer { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 72px; text-align: center; }
+.bar.me .stamina .fill {
+  background: linear-gradient(90deg, var(--green-dark) 0%, var(--green) 100%);
+  box-shadow: none;
+}
+.bar.me .stamina .fill::after { display: none; }
+.bar.opp .fill {
+  background: linear-gradient(90deg, var(--purple) 0%, #7828b8 40%, var(--purple-light) 100%);
+  box-shadow: 0 0 10px var(--purple-glow);
+}
+
+/* ─── Timer (CR gem panel) ──────────────────────────────────────────────── */
+.timer-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 0; flex-shrink: 0;
+  background: linear-gradient(to bottom, #1e3a6a 0%, #0d2248 100%);
+  border: 3px solid rgba(255,200,32,0.6);
+  border-bottom: 5px solid rgba(0,0,0,0.7);
+  border-radius: 16px; padding: 4px 16px 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15);
+  min-width: 80px;
+}
+.round-label {
+  font-family: 'Nunito', sans-serif; font-size: 8px; font-weight: 800;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--fg-dim);
+}
+.timer {
+  font-family: 'Lilita One', cursive; font-size: 32px; font-weight: 400;
+  font-variant-numeric: tabular-nums; text-align: center;
+  color: var(--gold); line-height: 1;
+  -webkit-text-stroke: 2px rgba(0,0,0,0.8); paint-order: stroke fill;
+  text-shadow: 0 0 16px var(--gold-glow);
+  animation: timer-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes timer-pulse {
+  from { text-shadow: 0 0 8px var(--gold-glow); }
+  to   { text-shadow: 0 0 22px var(--gold-glow), 0 0 40px rgba(255,200,32,0.3); }
+}
+
+/* ─── Server dot ────────────────────────────────────────────────────────── */
+.server-dot {
+  position: absolute; top: 14px; right: 14px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--fg-dim); pointer-events: none;
+  border: 2px solid rgba(0,0,0,0.5);
+  transition: background 0.3s, box-shadow 0.3s; z-index: 10;
+}
+.server-dot.online  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.server-dot.offline { background: var(--red); }
+.server-dot.connecting { background: var(--gold); animation: dot-blink 1s ease-in-out infinite; }
+@keyframes dot-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .status { position: absolute; top: 56px; right: 16px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .chip { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--panel); border: 1px solid rgba(255,255,255,0.15); }
@@ -123,20 +187,42 @@ button.chip:hover { border-color: rgba(255,255,255,0.5); }
   pointer-events: none;
 }
 
-.menu h1 {
-  margin: 0;
-  font-family: 'Lilita One', cursive;
-  font-size: clamp(44px, 10vw, 88px);
-  letter-spacing: 0.04em;
-  font-weight: 400;
-  line-height: 0.9;
-  color: var(--gold);
-  -webkit-text-stroke: 3px rgba(0,0,0,0.9);
+/* ── Game title: CLAUDE brand badge + TYSON boxing poster ─────────────── */
+.game-title {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; margin: 0 0 8px;
+}
+/* CLAUDE — Claude brand orange badge */
+.title-claude-badge {
+  background: linear-gradient(135deg, #ff8c42 0%, #e06820 55%, #b84c10 100%);
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-size: clamp(22px, 5vw, 48px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  padding: 6px 28px 8px;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,0.18) inset,
+    0 4px 24px rgba(255,100,20,0.6),
+    0 6px 0 rgba(0,0,0,0.4);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  line-height: 1;
+}
+/* TYSON — Mike Tyson boxing poster: Impact, huge, red/black aggression */
+.title-tyson-boxing {
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-size: clamp(72px, 19vw, 148px);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 0.88;
+  color: #fff;
+  -webkit-text-stroke: 5px #000;
   paint-order: stroke fill;
   text-shadow:
-    0 4px 0 var(--gold-dark),
-    0 6px 0 rgba(0,0,0,0.5),
-    0 0 40px var(--gold-glow);
+    6px 6px 0 #000,
+    8px 8px 0 rgba(180,0,0,0.75),
+    0 0 80px rgba(255,40,40,0.25);
 }
 .menu .tagline {
   font-family: 'Nunito', sans-serif;
@@ -219,7 +305,10 @@ button.chip:hover { border-color: rgba(255,255,255,0.5); }
   text-shadow: 0 3px 0 var(--gold-dark), 0 5px 0 rgba(0,0,0,0.4);
 }
 .menu .result p { max-width: 520px; color: var(--fg-dim); font-weight: 600; }
-.menu .profile { font-size: 14px; color: var(--fg-dim); line-height: 1.7; font-weight: 700; }
+.menu .profile { font-size: 14px; color: var(--fg-dim); line-height: 1.7; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.profile-name { color: #ffc820; font-family: 'Lilita One', cursive; font-size: 15px; letter-spacing: 0.05em; }
+.profile-change-name { background: none; border: none; padding: 0; margin-top: 2px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.25); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color 0.15s; }
+.profile-change-name:hover { color: rgba(255,255,255,0.55); }
 .dim { color: var(--fg-dim); font-size: 13px; max-width: 520px; font-weight: 700; }
 code {
   background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 5px;
@@ -322,6 +411,17 @@ code {
 }
 .vignette.hit { animation: hitflash 0.45s ease-out; }
 @keyframes hitflash { 0% { opacity: 1; } 35% { opacity: 0.7; } 100% { opacity: 0; } }
+/* KO slow-mo white flash */
+.vignette.ko-flash {
+  animation: koflash 2.2s ease-out;
+  box-shadow: none;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%);
+}
+@keyframes koflash {
+  0%   { opacity: 1; }
+  15%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
 
 
 /* ─── Pose + Telegraph ──────────────────────────────────────────────────── */
@@ -389,4 +489,844 @@ code {
 .calibration button {
   font: inherit; font-weight: 700; padding: 8px 16px; border-radius: 6px; border: 0; cursor: pointer;
   background: rgba(255,255,255,0.12); color: var(--fg);
+}
+
+/* ─── Result card (VICTORY / DEFEAT) ───────────────────────────────────── */
+.result-card {
+  position: absolute; inset: 0;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none; z-index: 150;
+  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 70%);
+}
+.result-card.fade-out .result-card-inner {
+  animation: result-fade-out 0.4s ease-in forwards;
+}
+.result-card-inner {
+  text-align: center;
+  animation: result-slam 0.42s cubic-bezier(0.22,0.61,0.36,1) forwards;
+  filter: drop-shadow(0 10px 40px rgba(0,0,0,0.85));
+}
+.result-card-banner {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(72px, 15vw, 116px);
+  font-weight: 400; line-height: 0.95;
+  letter-spacing: 0.04em;
+  paint-order: stroke fill;
+}
+.result-card-banner.win {
+  color: var(--gold);
+  -webkit-text-stroke: 4px rgba(0,0,0,0.9);
+  text-shadow: 0 6px 0 var(--gold-dark), 0 12px 0 rgba(0,0,0,0.5), 0 0 70px var(--gold-glow);
+}
+.result-card-banner.lose {
+  color: var(--red);
+  -webkit-text-stroke: 4px rgba(0,0,0,0.9);
+  text-shadow: 0 6px 0 var(--red-dark), 0 12px 0 rgba(0,0,0,0.5), 0 0 50px rgba(220,40,20,0.55);
+}
+.result-card-by {
+  font-size: 14px; font-weight: 800;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--fg-dim); margin-top: 6px;
+}
+.result-stars {
+  display: flex; gap: 12px; justify-content: center;
+  margin-top: 16px;
+}
+.result-stars span {
+  font-size: 46px; line-height: 1;
+  animation: star-pop 0.38s cubic-bezier(0.22,0.61,0.36,1) backwards;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+}
+.result-stars span:nth-child(2) { animation-delay: 0.13s; }
+.result-stars span:nth-child(3) { animation-delay: 0.26s; }
+@keyframes result-slam {
+  0%   { opacity: 0; transform: scale(2.0) translateY(-16px); }
+  55%  { opacity: 1; transform: scale(0.94) translateY(4px); }
+  100% { transform: scale(1) translateY(0); }
+}
+@keyframes result-fade-out {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06) translateY(-12px); }
+}
+@keyframes star-pop {
+  0%   { opacity: 0; transform: scale(0) rotate(-25deg); }
+  55%  { transform: scale(1.3) rotate(6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* ─── Corner-scene coach speech bubble ─────────────────────────────────── */
+.debrief {
+  position: absolute; bottom: 11%; right: 3%;
+  max-width: 340px; display: none;
+  z-index: 120; pointer-events: auto;
+  animation: debrief-in 0.35s cubic-bezier(0.22,0.61,0.36,1);
+}
+@keyframes debrief-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.93); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.debrief-box {
+  background: linear-gradient(135deg, rgba(20,36,64,0.97) 0%, rgba(12,22,42,0.97) 100%);
+  border: 3px solid var(--orange);
+  border-bottom: 6px solid rgba(0,0,0,0.7);
+  border-radius: 18px;
+  padding: 14px 16px 12px;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.75), 0 0 20px rgba(255,136,0,0.28), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+/* Tail pointing down-right toward Claude's corner */
+.debrief-box::after {
+  content: '';
+  position: absolute;
+  bottom: -17px; right: 28px;
+  border-top: 17px solid var(--orange);
+  border-left: 11px solid transparent;
+  border-right: 0 solid transparent;
+}
+.debrief-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 9px;
+}
+.debrief-claude-icon {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: radial-gradient(circle at 40% 38%, #ff9050, #e06820 55%, #a83000);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Lilita One', cursive; font-size: 15px; color: #fff;
+  -webkit-text-stroke: 0.5px rgba(0,0,0,0.5);
+  box-shadow: 0 2px 8px rgba(255,100,20,0.55);
+}
+.debrief-source {
+  font-family: 'Lilita One', cursive;
+  font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--orange);
+  -webkit-text-stroke: 0.5px rgba(0,0,0,0.5);
+  paint-order: stroke fill;
+}
+.debrief-source.offline { color: var(--fg-dim); }
+.debrief-box p {
+  margin: 0 0 11px; font-size: 14px; font-weight: 700;
+  line-height: 1.55; color: var(--fg);
+  min-height: 2.5em;
+}
+.debrief-close {
+  display: block; width: 100%; cursor: pointer;
+  font-family: 'Lilita One', cursive; font-size: 13px; font-weight: 400;
+  padding: 8px 20px 10px; border-radius: 12px;
+  border: 2.5px solid rgba(255,255,255,0.2);
+  border-bottom: 5px solid rgba(0,0,0,0.6);
+  background: linear-gradient(to bottom, #ff9a22 0%, #cc6800 100%);
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.5); paint-order: stroke fill;
+  text-transform: uppercase; letter-spacing: 0.1em; text-align: center;
+  transition: filter 0.1s, transform 0.1s, border-bottom-width 0.08s;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+.debrief-close:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.debrief-close:active { transform: translateY(3px); border-bottom-width: 2px; }
+
+/* ─── Tyson Mii-style speech bubble (tracks head via CSS vars) ─────────── */
+.dialogue {
+  position: fixed;
+  left: var(--dlg-x, 50vw);
+  top: var(--dlg-y, 30vh);
+  transform: translate(-50%, calc(-100% - 22px)) scale(0.88);
+  max-width: min(360px, 80vw);
+  background: #fff;
+  border: 3px solid #1a1a2a;
+  border-bottom: 5px solid #1a1a2a;
+  border-radius: 20px;
+  padding: 12px 18px 14px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 15px; font-weight: 800; font-style: italic;
+  color: #1a1a2a; text-align: center;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  z-index: 50;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+.dialogue.visible {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 22px)) scale(1);
+}
+/* Tail pointing down toward Tyson's head */
+.dialogue::after {
+  content: '';
+  position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+  border-left: 10px solid transparent; border-right: 10px solid transparent;
+  border-top: 14px solid #1a1a2a;
+}
+
+/* ─── ADAPTED tag ───────────────────────────────────────────────────────── */
+.adapted-tag {
+  position: absolute; top: 70px; left: 50%;
+  transform: translateX(-50%) translateY(-14px);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.25s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  z-index: 60;
+}
+.adapted-tag.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+.adapted-label {
+  font-family: 'Lilita One', cursive; font-size: 22px;
+  letter-spacing: 0.16em; color: var(--gold);
+  -webkit-text-stroke: 2px rgba(0,0,0,0.8); paint-order: stroke fill;
+  text-shadow: 0 3px 0 var(--gold-dark), 0 0 30px var(--gold-glow);
+}
+.adapted-explain {
+  font-size: 13px; font-weight: 800;
+  color: var(--purple-light); text-align: center; max-width: 380px;
+  text-shadow: 0 0 8px var(--purple-glow);
+}
+
+/* ─── Adaptation purple flash vignette ──────────────────────────────────── */
+.adapt-vignette {
+  position: absolute; inset: 0; opacity: 0; pointer-events: none;
+  box-shadow: inset 0 0 160px 50px rgba(144,48,208,0.82);
+}
+.adapt-vignette.flash { animation: adapt-vignette-flash 0.45s ease-out; }
+@keyframes adapt-vignette-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+
+/* ─── AI Transparency Log (CR-themed) ──────────────────────────────────── */
+#ai-log {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(360px, 92vw);
+  background: var(--navy);
+  border-left: 3px solid rgba(255,200,32,0.3);
+  display: none; flex-direction: column;
+  z-index: 50; pointer-events: auto;
+  font-family: 'Nunito', ui-sans-serif, sans-serif; font-size: 11px;
+}
+.al-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 2px solid rgba(255,200,32,0.2);
+  background: rgba(0,0,0,0.35); flex-shrink: 0;
+}
+.al-title {
+  font-family: 'Lilita One', cursive; font-size: 11px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--gold);
+  -webkit-text-stroke: 0.5px rgba(0,0,0,0.5); paint-order: stroke fill;
+}
+.al-close {
+  background: none; border: none; color: var(--fg-dim);
+  cursor: pointer; font-size: 18px; line-height: 1;
+}
+.al-close:hover { color: var(--fg); }
+.al-legend {
+  padding: 6px 14px; font-size: 10px; color: var(--fg-dim);
+  border-bottom: 1px solid rgba(255,200,32,0.1); line-height: 1.8; font-weight: 700;
+}
+.al-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+.al-entry {
+  display: grid; grid-template-columns: 54px 60px 1fr;
+  gap: 4px; padding: 4px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  align-items: start; line-height: 1.5;
+}
+.al-ts { color: var(--fg-dim); font-size: 10px; opacity: 0.6; }
+.al-label {
+  font-family: 'Lilita One', cursive; font-weight: 400; font-size: 10px;
+  letter-spacing: 0.06em; color: var(--purple-light);
+}
+.al-text { color: var(--fg); word-break: break-word; font-weight: 600; }
+
+#ai-log-btn {
+  position: fixed; bottom: 14px; right: 14px;
+  background: var(--navy-panel);
+  border: 2px solid rgba(255,200,32,0.4);
+  border-bottom: 4px solid rgba(0,0,0,0.6);
+  color: var(--gold); font-family: 'Lilita One', cursive;
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 7px 14px 9px; border-radius: 10px; cursor: pointer;
+  z-index: 49; pointer-events: auto;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  -webkit-text-stroke: 0.5px rgba(0,0,0,0.5); paint-order: stroke fill;
+  transition: filter 0.1s, transform 0.1s;
+}
+#ai-log-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+/* ─── Wii-style Claude crab analysis bubble ─────────────────────────────── */
+.wii-crab-bubble {
+  position: fixed;
+  min-width: 260px; max-width: 340px;
+  /* tail anchor = crab head; bubble appears above */
+  transform: translate(-50%, calc(-100% - 26px)) scale(0.75);
+  background: #fff;
+  border-radius: 22px;
+  border: 3px solid #111;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 28px rgba(255,100,20,0.25);
+  padding: 0 0 14px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 300;
+  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1);
+}
+.wii-crab-bubble.visible {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 26px)) scale(1);
+  pointer-events: auto;
+}
+/* Tail pointing down toward crab */
+.wii-crab-bubble::before {
+  content: '';
+  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  border-left: 13px solid transparent; border-right: 13px solid transparent;
+  border-top: 18px solid #111;
+}
+.wii-crab-bubble::after {
+  content: '';
+  position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+  border-left: 10px solid transparent; border-right: 10px solid transparent;
+  border-top: 12px solid #fff;
+  z-index: 1;
+}
+/* Orange Claude header */
+.wii-bubble-header {
+  background: linear-gradient(135deg, #ff8c42 0%, #e06820 100%);
+  border-radius: 19px 19px 0 0;
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.wii-bubble-icon {
+  width: 30px; height: 30px; flex-shrink: 0;
+  background: #fff; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Lilita One', cursive; font-size: 15px; color: #e06820;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.wii-bubble-source {
+  font-family: 'Lilita One', cursive; font-size: 11px;
+  letter-spacing: 0.14em; color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+/* Body text — Claude chat streaming style */
+#wii-text {
+  margin: 12px 16px 10px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px; font-weight: 700; line-height: 1.55;
+  color: #111; min-height: 3.5em;
+}
+/* Blinking orange cursor while streaming */
+.wii-cursor {
+  display: inline-block; width: 2px; height: 1em;
+  background: #e06820; vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: wii-blink 0.55s step-end infinite;
+}
+@keyframes wii-blink { 50% { opacity: 0; } }
+/* GOT IT button */
+.wii-bubble-ok {
+  display: block; width: calc(100% - 32px); margin: 0 16px;
+  cursor: pointer;
+  font-family: 'Lilita One', cursive; font-size: 13px; font-weight: 400;
+  letter-spacing: 0.1em; text-transform: uppercase; text-align: center; color: #fff;
+  padding: 9px 20px 11px; border-radius: 13px;
+  border: 2.5px solid rgba(255,255,255,0.2);
+  border-bottom: 5px solid rgba(0,0,0,0.4);
+  background: linear-gradient(to bottom, #ff9a22 0%, #cc6800 100%);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+  transition: filter 0.1s, transform 0.08s, border-bottom-width 0.08s;
+}
+.wii-bubble-ok:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.wii-bubble-ok:active { transform: translateY(2px); border-bottom-width: 2px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAME ENTRY SCREEN
+   ═══════════════════════════════════════════════════════════════════════════ */
+#name-entry-screen {
+  position: fixed; inset: 0; z-index: 4000;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 0;
+  background: linear-gradient(170deg, #07101f 0%, #0d1b2e 55%, #162540 100%);
+  animation: ne-in 0.55s cubic-bezier(0.16,1,0.3,1) both;
+}
+#name-entry-screen.ne-fade-out { animation: ne-out 0.38s ease-in both; }
+@keyframes ne-in  { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:none; } }
+@keyframes ne-out { from { opacity:1; transform:none; } to { opacity:0; transform:scale(1.03); } }
+
+.ne-logo {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(1rem, 3vw, 1.5rem);
+  letter-spacing: 0.22em;
+  color: #ffc820;
+  text-shadow: 0 0 40px rgba(255,200,32,0.45);
+  margin-bottom: 2.8rem;
+  opacity: 0.9;
+}
+.ne-prompt {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(1.5rem, 5vw, 2.6rem);
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-align: center;
+  margin-bottom: 2rem;
+  line-height: 1.2;
+}
+.ne-input {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(1.3rem, 4vw, 2rem);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #fff;
+  background: rgba(255,255,255,0.06);
+  border: 3px solid rgba(255,200,32,0.3);
+  border-radius: 20px;
+  padding: 18px 40px;
+  width: min(460px, 85vw);
+  outline: none;
+  caret-color: #ffc820;
+  transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+}
+.ne-input:focus {
+  border-color: #ffc820;
+  background: rgba(255,200,32,0.06);
+  box-shadow: 0 0 0 5px rgba(255,200,32,0.12), 0 6px 32px rgba(0,0,0,0.5);
+}
+.ne-input::placeholder { color: rgba(255,255,255,0.2); }
+.ne-btn {
+  margin-top: 1.8rem;
+  font-family: 'Lilita One', cursive;
+  font-size: 1.55rem;
+  letter-spacing: 0.06em;
+  color: #0d1b2e;
+  background: linear-gradient(to bottom, #ffe550 0%, #ffc820 55%, #e8a000 100%);
+  border: none;
+  border-bottom: 7px solid #9a6000;
+  border-radius: 20px;
+  padding: 16px 64px 18px;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55), inset 0 2px 0 rgba(255,255,255,0.35);
+  transition: filter 0.12s, transform 0.08s, border-bottom-width 0.08s;
+}
+.ne-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-2px); }
+.ne-btn:active:not(:disabled) { transform: translateY(4px); border-bottom-width: 2px; }
+.ne-btn:disabled { opacity: 0.35; cursor: default; }
+.ne-change {
+  margin-top: 1.4rem;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.82rem; font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s;
+}
+.ne-change:hover { color: rgba(255,255,255,0.6); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WII SAFETY SCREEN  — compact system-dialog + animated boxing background
+   ═══════════════════════════════════════════════════════════════════════════ */
+#wii-safety-screen {
+  position: fixed; inset: 0; z-index: 4000;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  background: #0a0f1a;
+  overflow: hidden;
+  animation: wss-in 0.42s ease both;
+}
+#wii-safety-screen.wss-fade-out { animation: wss-out 0.35s ease both; }
+@keyframes wss-in  { from { opacity:0; } to { opacity:1; } }
+@keyframes wss-out { from { opacity:1; } to { opacity:0; } }
+
+/* ── Animated boxing-ring background layer ──────────────────────── */
+.wss-bg { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+/* Faint CT watermark */
+.wss-watermark {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%) rotate(-10deg);
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(16rem, 42vw, 28rem);
+  color: rgba(255,140,66,0.025);
+  white-space: nowrap; user-select: none; pointer-events: none;
+  letter-spacing: -0.04em;
+}
+/* Three horizontal ring ropes */
+.wss-rope {
+  position: absolute; left: -2%; right: -2%; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,140,66,0.22) 12%,
+    rgba(255,160,80,0.42) 50%,
+    rgba(255,140,66,0.22) 88%,
+    transparent 100%);
+}
+.wss-rope-1 { top: 25%; animation: rope-sway 5.2s ease-in-out 0s   infinite; }
+.wss-rope-2 { top: 50%; animation: rope-sway 6.1s ease-in-out 0.7s infinite; }
+.wss-rope-3 { top: 75%; animation: rope-sway 4.8s ease-in-out 1.4s infinite; }
+@keyframes rope-sway {
+  0%,100% { transform: scaleY(1); }
+  50%     { transform: scaleY(2.2) translateY(-1px); }
+}
+/* Corner post pillars */
+.wss-post {
+  position: absolute; width: 9px; top: 18%; bottom: 18%; border-radius: 4px;
+  background: linear-gradient(to right, #2a1800, #7a4800, #2a1800);
+  box-shadow: 0 0 18px rgba(255,140,66,0.2);
+}
+.wss-post-l { left: 6%; }
+.wss-post-r { right: 6%; }
+/* Corner caps */
+.wss-post::before, .wss-post::after {
+  content: ''; position: absolute; left: -3px; right: -3px;
+  height: 18px; border-radius: 5px;
+  background: #c87a20;
+  box-shadow: 0 0 10px rgba(255,140,66,0.4);
+}
+.wss-post::before { top: -6px; }
+.wss-post::after  { bottom: -6px; }
+
+/* Floating boxing gloves */
+.wss-glove {
+  position: absolute; font-size: 3rem; line-height: 1;
+  opacity: 0; pointer-events: none;
+  animation: glove-rise linear infinite;
+  filter: drop-shadow(0 0 6px rgba(255,120,40,0.25));
+}
+.wss-glove-1 { left: 7%;  animation-duration:15s; animation-delay:0s;  }
+.wss-glove-2 { left: 83%; animation-duration:18s; animation-delay:3.5s;}
+.wss-glove-3 { left: 48%; animation-duration:21s; animation-delay:8s;  }
+.wss-glove-4 { left: 25%; animation-duration:17s; animation-delay:13s; }
+.wss-glove-5 { left: 65%; animation-duration:14s; animation-delay:6s;  }
+@keyframes glove-rise {
+  0%   { bottom:-8%; opacity:0;    transform:rotate(-20deg) scale(0.75); }
+  8%   { opacity:0.2; }
+  85%  { opacity:0.13; }
+  100% { bottom:108%; opacity:0;   transform:rotate(18deg) scale(1.05); }
+}
+/* Stars */
+.wss-star {
+  position: absolute; font-size: 1.1rem; opacity: 0; pointer-events: none;
+  animation: star-twinkle ease-in-out infinite;
+}
+.wss-star-1 { top:15%; left:18%; animation-duration:2.8s; animation-delay:0s; }
+.wss-star-2 { top:20%; right:22%; animation-duration:3.4s; animation-delay:1s; }
+.wss-star-3 { top:72%; left:14%; animation-duration:2.2s; animation-delay:0.4s; }
+.wss-star-4 { top:68%; right:16%; animation-duration:3.1s; animation-delay:1.8s; }
+.wss-star-5 { top:42%; left:6%;  animation-duration:2.6s; animation-delay:0.9s; }
+.wss-star-6 { top:38%; right:7%; animation-duration:3.0s; animation-delay:2.2s; }
+@keyframes star-twinkle {
+  0%,100% { opacity:0; transform:scale(0.6); }
+  50%     { opacity:0.55; transform:scale(1.15); }
+}
+/* Soft center vignette spotlight */
+.wss-vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 50% 55% at 50% 50%, rgba(255,140,66,0.06) 0%, transparent 65%),
+    radial-gradient(ellipse 100% 100% at 50% 50%, transparent 40%, rgba(0,0,0,0.55) 100%);
+}
+
+/* ── Compact Wii-style system dialog ─────────────────────────────── */
+.wss-dialog {
+  position: relative; z-index: 2;
+  width: min(390px, 90vw);
+  border-radius: 10px; overflow: hidden;
+  background: #e8e8e8;
+  box-shadow:
+    0 0 0 3px rgba(0,0,0,0.65),
+    0 28px 72px rgba(0,0,0,0.9),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+  animation: dialog-pop 0.48s cubic-bezier(0.34,1.56,0.64,1) 0.08s both;
+}
+@keyframes dialog-pop {
+  from { transform: scale(0.88) translateY(-16px); opacity:0; }
+  to   { transform: none; opacity:1; }
+}
+
+/* Blue Wii-channel header */
+.wss-dialog-header {
+  background: linear-gradient(180deg, #4a8ee8 0%, #1a55c0 100%);
+  padding: 9px 16px 10px;
+  display: flex; align-items: center; gap: 9px;
+  border-bottom: 2px solid #1040a0;
+}
+.wss-dialog-icon {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.18);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.82rem; font-weight: 900; color: #fff; line-height: 1;
+}
+.wss-dialog-header-title {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.75rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+
+/* Two-column body: diagram | text */
+.wss-dialog-body {
+  padding: 14px 16px 12px;
+  display: flex; gap: 14px; align-items: flex-start;
+  border-bottom: 1px solid #ccc;
+}
+.wss-diagram-svg { width: 88px; height: 88px; flex-shrink: 0; }
+.wss-dialog-textcol { flex: 1; }
+.wss-dialog-title {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.8rem; font-weight: 800;
+  color: #111; margin: 0 0 7px; line-height: 1.3;
+}
+.wss-dialog-text {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.72rem; font-weight: 400; line-height: 1.7; color: #333; margin: 0;
+}
+.wss-dialog-text b { color: #111; font-weight: 700; }
+
+/* Footer */
+.wss-dialog-footer {
+  padding: 10px 16px 11px;
+  background: #ddd;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.wss-dialog-hint {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.66rem; color: #777; letter-spacing: 0.03em;
+}
+
+/* Wii green A-button */
+.wss-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.74rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: #fff;
+  background: linear-gradient(180deg, #44b044 0%, #267226 100%);
+  border: none; border-radius: 20px;
+  padding: 8px 20px 9px; cursor: pointer;
+  box-shadow: 0 3px 0 #1a5c1a, 0 5px 14px rgba(0,0,0,0.3);
+  transition: filter 0.1s, transform 0.08s, box-shadow 0.08s;
+}
+.wss-btn-a {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(255,255,255,0.22); border: 1.5px solid rgba(255,255,255,0.45);
+  font-size: 0.68rem; font-weight: 900; color: #fff;
+}
+.wss-btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 0 #1a5c1a, 0 7px 18px rgba(0,0,0,0.35); }
+.wss-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a5c1a; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VS SCREEN  — Street Fighter / Tekken style theatrical intro
+   ═══════════════════════════════════════════════════════════════════════════ */
+#vs-screen {
+  position: fixed; inset: 0; z-index: 3500;
+  display: none;
+  align-items: stretch; justify-content: center;
+  background: #000;
+  overflow: hidden;
+  cursor: pointer;
+}
+#vs-screen.vs-exit {
+  animation: vs-exit 0.45s cubic-bezier(0.55,0,1,0.45) both;
+}
+@keyframes vs-exit {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: scale(1.04); }
+}
+
+/* Subtle scanline background texture */
+.vs-bg-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.08) 3px,
+    rgba(0,0,0,0.08) 4px
+  );
+}
+
+/* Radial spotlight beams from each side */
+.vs-spotlight {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 80% at 20% 50%, rgba(30,70,160,0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 45% 80% at 80% 50%, rgba(200,120,0,0.22) 0%, transparent 65%);
+  z-index: 1;
+  animation: vs-spotlight-in 1s ease 0.3s both;
+}
+@keyframes vs-spotlight-in { from { opacity:0; } to { opacity:1; } }
+
+/* Fighter panels */
+.vs-fighter {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end;
+  gap: 0;
+  padding: 0 0 60px;
+  position: relative; z-index: 2;
+  overflow: hidden;
+}
+.vs-fighter.player-side {
+  background: linear-gradient(160deg, #0f1e38 0%, #0d1b2e 50%, #091425 100%);
+  border-right: 1px solid rgba(255,255,255,0.05);
+  animation: vs-slide-left 0.42s cubic-bezier(0.16,1,0.3,1) both;
+}
+.vs-fighter.cpu-side {
+  background: linear-gradient(200deg, #1e1200 0%, #170e00 50%, #0e0800 100%);
+  border-left: 1px solid rgba(255,255,255,0.05);
+  animation: vs-slide-right 0.42s cubic-bezier(0.16,1,0.3,1) 0.08s both;
+}
+@keyframes vs-slide-left  { from { transform: translateX(-115%); } to { transform: none; } }
+@keyframes vs-slide-right { from { transform: translateX(115%);  } to { transform: none; } }
+
+/* Portrait fill area */
+.vs-portrait-wrap {
+  position: absolute; inset: 0 0 80px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.vs-portrait-bg {
+  position: absolute; inset: 0;
+}
+.player-bg {
+  background: radial-gradient(ellipse 70% 60% at 50% 60%, rgba(30,80,200,0.28) 0%, transparent 70%);
+}
+.cpu-bg {
+  background: radial-gradient(ellipse 70% 60% at 50% 60%, rgba(200,120,0,0.28) 0%, transparent 70%);
+}
+
+/* Avatar circle (initials fallback) */
+.vs-avatar {
+  width: clamp(110px,18vw,170px);
+  height: clamp(110px,18vw,170px);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(2rem,5vw,3.2rem);
+  color: #fff;
+  border: 5px solid rgba(255,255,255,0.12);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.05), 0 12px 48px rgba(0,0,0,0.7);
+  letter-spacing: 0.02em;
+  position: relative;
+  overflow: hidden;
+  z-index: 2;
+  transition: opacity 0.3s;
+}
+.vs-avatar::after {
+  content: '';
+  position: absolute; inset: 0; border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255,255,255,0.18) 0%, transparent 55%);
+  pointer-events: none;
+}
+.player-side .vs-avatar {
+  background: radial-gradient(circle at 35% 35%, #3a7bd5 0%, #1a4e9e 50%, #0e2f6b 100%);
+}
+.cpu-side .vs-avatar {
+  background: radial-gradient(circle at 35% 35%, #d48c1a 0%, #9a5c00 50%, #5c3200 100%);
+}
+/* When portrait image is loaded, show it instead of initials */
+.vs-avatar.has-portrait {
+  border-radius: 0; border: none; background: transparent;
+  box-shadow: none; width: 100%; height: 100%; max-width: none; max-height: none;
+}
+.vs-portrait-img {
+  width: 100%; height: 100%;
+  object-fit: contain; object-position: bottom center;
+}
+
+/* Name plate overlay at bottom of portrait area */
+.vs-name-plate {
+  position: relative; z-index: 3;
+  text-align: center;
+  padding: 0 12px;
+}
+.vs-name {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(1.4rem,4vw,2.6rem);
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.8);
+  line-height: 1.1;
+  margin-bottom: 0.3rem;
+}
+.vs-record {
+  font-family: 'Nunito', sans-serif;
+  font-size: clamp(0.75rem,1.8vw,0.95rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.38);
+}
+/* Corner label strip at bottom of each panel */
+.vs-corner-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 6px; z-index: 4;
+}
+.player-side .vs-corner-label { background: linear-gradient(90deg, #2a5fbd, #5090ff); }
+.cpu-side   .vs-corner-label { background: linear-gradient(90deg, #c87a00, #ffc820); }
+
+/* Center VS divider */
+.vs-center {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
+  z-index: 10;
+  pointer-events: none;
+  animation: vs-center-in 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.38s both;
+}
+@keyframes vs-center-in {
+  from { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
+  to   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+}
+.vs-text {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(4.5rem, 13vw, 9rem);
+  line-height: 1;
+  color: #ffc820;
+  letter-spacing: -0.03em;
+  text-shadow:
+    0 0 60px rgba(255,200,32,0.55),
+    0 4px 0 #8a5200,
+    0 8px 2px rgba(0,0,0,0.6);
+}
+
+/* Animated electric clash line at center */
+.vs-clash-line {
+  width: 4px; height: 60vh;
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgba(255,200,32,0.6) 20%,
+    #ffd040 50%,
+    rgba(255,200,32,0.6) 80%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 8px 2px rgba(255,200,32,0.6),
+    0 0 20px 6px rgba(255,140,0,0.3);
+  animation: vs-clash-in 0.25s ease-out 0.42s both;
+  border-radius: 2px;
+}
+@keyframes vs-clash-in {
+  from { opacity: 0; transform: scaleY(0); }
+  to   { opacity: 1; transform: scaleY(1); }
+}
+
+.vs-skip-hint {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+  font-family: 'Nunito', sans-serif; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(255,255,255,0.18);
+  z-index: 10; pointer-events: none;
+  animation: vs-hint-in 0.4s ease 1.5s both;
+}
+@keyframes vs-hint-in { from { opacity:0; } to { opacity:1; } }
+
+/* White + gold flash at moment of impact */
+.vs-flash {
+  position: absolute; inset: 0; z-index: 8;
+  background: radial-gradient(ellipse at center, #fff8e0 0%, #fff 60%);
+  pointer-events: none;
+  animation: vs-flash-anim 0.35s ease-out 0.38s both;
+}
+@keyframes vs-flash-anim {
+  0%   { opacity: 0.85; }
+  100% { opacity: 0; }
 }

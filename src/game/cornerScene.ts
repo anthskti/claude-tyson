@@ -1,71 +1,38 @@
 // Post-fight corner scene.
 // After the match ends, the camera lerps to the player's corner showing:
 //   - A crowd of silhouette figures behind the ring
-//   - A glowing Claude placeholder model (box with "CLAUDE" label)
-//   - A mini-Claude analysis overlay
+//   - A glowing Claude placeholder model (box with "CLAUDE" label), or a loaded GLB crab
+//   - A self-managed analysis bubble DOM element
 
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { DbConnection } from "./module_bindings";
 import type { AnalysisRequest, FightWindowSummary } from "../../coach/analysis";
 
-// ── Ring geometry reference (matches ring.ts) ────────────────────────────
-const RING_HALF = 3; // 6 m ring
-
-// ── Camera target: player's ringside corner, looking diagonally across ──
-const CORNER_CAM_POS = new THREE.Vector3(4.5, 1.7, 4.5);
-const CORNER_CAM_LOOK = new THREE.Vector3(-0.5, 1.4, -1.5);
+// ── Camera target: inside ring looking toward corner coach ──────────────
+const CORNER_CAM_POS  = new THREE.Vector3(1.6, 1.55, 1.6);   // inside ring, near player corner
+const CORNER_CAM_LOOK = new THREE.Vector3(3.6,  1.1,  3.6);  // looking at crab/placeholder head
 
 // ── Claude placeholder: outside the near-right (blue) ring corner ────────
 const CLAUDE_PLACEHOLDER_POS = new THREE.Vector3(3.6, 0.0, 3.6);
 
-// Crowd layout: rows behind and to the sides of the ring
-const CROWD_CONFIGS: { x: number; z: number; h: number; col: number }[] = [];
-(function buildCrowd() {
-  const colors = [0x2233aa, 0xaa2222, 0x229933, 0x886600, 0x553399, 0x116677];
-  const rng = mulberry32(0xdeadbeef);
-  // Far end (behind opponent corner, z < -RING_HALF-0.5)
-  for (let row = 0; row < 4; row++) {
-    const z = -(RING_HALF + 1.5 + row * 0.9);
-    for (let col = -6; col <= 6; col++) {
-      CROWD_CONFIGS.push({ x: col * 0.95 + (rng() - 0.5) * 0.4, z, h: 0.8 + rng() * 0.5, col: colors[Math.floor(rng() * colors.length)] });
-    }
-  }
-  // Left side (x < -RING_HALF-0.5)
-  for (let row = 0; row < 3; row++) {
-    const x = -(RING_HALF + 1.5 + row * 0.9);
-    for (let zi = -4; zi <= 4; zi++) {
-      CROWD_CONFIGS.push({ x, z: zi * 0.95 + (rng() - 0.5) * 0.4, h: 0.8 + rng() * 0.5, col: colors[Math.floor(rng() * colors.length)] });
-    }
-  }
-  // Right side
-  for (let row = 0; row < 3; row++) {
-    const x = (RING_HALF + 1.5 + row * 0.9);
-    for (let zi = -4; zi <= 4; zi++) {
-      CROWD_CONFIGS.push({ x, z: zi * 0.95 + (rng() - 0.5) * 0.4, h: 0.8 + rng() * 0.5, col: colors[Math.floor(rng() * colors.length)] });
-    }
-  }
-})();
-
-function mulberry32(seed: number) {
-  let s = seed;
-  return () => { s += 0x6D2B79F5; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-}
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export interface CornerSceneOptions {
   scene: THREE.Scene;
   camera: THREE.Camera;
+  renderer: THREE.WebGLRenderer;
   analysisUrl?: string; // default "/api/analysis"
   fetchImpl?: typeof fetch;
-  onAnalysis?: (text: string, source: "claude" | "offline") => void;
 }
 
 export class CornerScene {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
+  private renderer: THREE.WebGLRenderer;
   private opts: CornerSceneOptions;
 
   // Three.js objects (added to scene, hidden by default)
-  private crowdGroup: THREE.Group;
   private claudeGroup: THREE.Group;
 
   // Camera animation state
@@ -79,34 +46,51 @@ export class CornerScene {
 
   active = false;
   private pulseT = 0;
+  private bobT = 0;
   private pendingAnalysis: { text: string; source: "claude" | "offline" } | null = null;
   private analysisFired = false;
+
+  // Crab model state
+  private crabLoaded = false;
+  private crabMesh: THREE.Object3D | null = null;
+
+  // Analysis bubble DOM element
+  private bubbleEl: HTMLDivElement;
+  private typewriterTimer = 0;
 
   constructor(opts: CornerSceneOptions) {
     this.scene = opts.scene;
     this.camera = opts.camera;
+    this.renderer = opts.renderer;
     this.opts = opts;
 
-    this.crowdGroup = this.buildCrowd();
     this.claudeGroup = this.buildClaudePlaceholder();
-
-    this.crowdGroup.visible = false;
     this.claudeGroup.visible = false;
+    // Light starts at 0 so it doesn't leak into the main scene when inactive
+    const light = this.claudeGroup.getObjectByName("claudeLight") as THREE.PointLight | undefined;
+    if (light) light.intensity = 0;
 
-    this.scene.add(this.crowdGroup, this.claudeGroup);
+    this.scene.add(this.claudeGroup);
 
     // Pre-compute camera end quaternion
     this.camDummy.position.copy(CORNER_CAM_POS);
     this.camDummy.lookAt(CORNER_CAM_LOOK);
     this.camEndQuat.copy(this.camDummy.quaternion);
+
+    // Create analysis bubble DOM element
+    this.bubbleEl = document.createElement("div");
+    this.bubbleEl.className = "wii-crab-bubble";
+    document.body.appendChild(this.bubbleEl);
+
+    // Async load the crab GLB
+    void this.loadCrab();
   }
 
   // ── Public API ─────────────────────────────────────────────────────────
 
-  /** Trigger the corner scene after a fight ends. Fetches analysis and calls onAnalysis. */
+  /** Trigger the corner scene after a fight ends. Fetches analysis and shows bubble. */
   enter(conn: DbConnection | undefined, matchId: bigint, won: boolean, reason: string, adaptationCount: number) {
     this.active = true;
-    this.crowdGroup.visible = true;
     this.claudeGroup.visible = true;
 
     // Reset analysis state for this fight
@@ -120,17 +104,21 @@ export class CornerScene {
     this.camStartQuat.copy(this.camera.quaternion);
 
     // Fetch analysis; delivered after camera settles
-    this.fetchAnalysis(conn, matchId, won, reason, adaptationCount);
+    void this.fetchAnalysis(conn, matchId, won, reason, adaptationCount);
   }
 
   /** Hide everything and return camera control to the main loop. */
   exit() {
     this.active = false;
     this.animating = false;
-    this.crowdGroup.visible = false;
     this.claudeGroup.visible = false;
+    // Kill the light so it doesn't leak into the main scene
+    const light = this.claudeGroup.getObjectByName("claudeLight") as THREE.PointLight | undefined;
+    if (light) light.intensity = 0;
     this.pendingAnalysis = null;
     this.analysisFired = false;
+    this.bubbleEl.classList.remove("visible");
+    clearTimeout(this.typewriterTimer);
   }
 
   /** Called every frame from main.ts animation loop. Returns true while cinematic camera is active. */
@@ -139,25 +127,32 @@ export class CornerScene {
 
     // Camera lerp to corner position
     if (this.animating) {
-      this.animT = Math.min(1, this.animT + dt * 0.6); // ~1.7s transition
+      this.animT = Math.min(1, this.animT + dt * 0.4); // ~2.5s cinematic transition
       const t = easeInOut(this.animT);
       this.camera.position.lerpVectors(this.camStartPos, this.camEndPos, t);
       this.camera.quaternion.slerpQuaternions(this.camStartQuat, this.camEndQuat, t);
       if (this.animT >= 1) {
         this.animating = false;
-        // Camera settled — show analysis bubble now
+        // Camera settled — show analysis bubble after dramatic pause
         if (this.pendingAnalysis && !this.analysisFired) {
           this.analysisFired = true;
-          this.opts.onAnalysis?.(this.pendingAnalysis.text, this.pendingAnalysis.source);
+          const pending = this.pendingAnalysis;
+          window.setTimeout(() => this.showAnalysisBubble(pending.text, pending.source), 300);
         }
       }
     }
 
-    // Animate Claude logo
+    // Animate Claude logo / crab
     this.pulseT += dt;
 
-    // Slow coin-spin of the whole group so the logo rotates like a prize badge
-    this.claudeGroup.rotation.y += dt * 0.55;
+    if (this.crabLoaded && this.crabMesh) {
+      // Bob the crab up and down
+      this.bobT += dt;
+      this.crabMesh.position.y = Math.sin(this.bobT * 1.5) * 0.06;
+    } else {
+      // Placeholder fallback: slow coin-spin of the whole group
+      this.claudeGroup.rotation.y += dt * 0.55;
+    }
 
     // Pulse the orange glow light
     const claudeLight = this.claudeGroup.getObjectByName("claudeLight") as THREE.PointLight | undefined;
@@ -165,34 +160,125 @@ export class CornerScene {
       claudeLight.intensity = 3.5 + Math.sin(this.pulseT * 2.1) * 1.5;
     }
 
-    // Pulse glow disc opacity
-    const glowDisc = this.claudeGroup.getObjectByName("claudeGlowDisc") as THREE.Mesh | undefined;
-    if (glowDisc) {
-      (glowDisc.material as THREE.MeshStandardMaterial).opacity = 0.18 + Math.sin(this.pulseT * 2.1) * 0.1;
+    // Pulse glow disc opacity (only relevant when crab not loaded)
+    if (!this.crabLoaded) {
+      const glowDisc = this.claudeGroup.getObjectByName("claudeGlowDisc") as THREE.Mesh | undefined;
+      if (glowDisc) {
+        (glowDisc.material as THREE.MeshStandardMaterial).opacity = 0.18 + Math.sin(this.pulseT * 2.1) * 0.1;
+      }
+    }
+
+    // Keep bubble positioned over crab head while visible
+    if (!this.animating && this.bubbleEl.classList.contains("visible")) {
+      this.updateBubblePosition();
     }
 
     return true; // we own the camera
   }
 
-  // ── Private: scene building ─────────────────────────────────────────────
+  // ── Private: crab loader ────────────────────────────────────────────────
 
-  private buildCrowd(): THREE.Group {
-    const group = new THREE.Group();
-    group.name = "crowd";
-    for (const cfg of CROWD_CONFIGS) {
-      // Head (sphere)
-      const headGeo = new THREE.SphereGeometry(0.14, 6, 5);
-      const mat = new THREE.MeshStandardMaterial({ color: cfg.col, roughness: 1, emissive: cfg.col, emissiveIntensity: 0.2 });
-      const head = new THREE.Mesh(headGeo, mat);
-      head.position.set(cfg.x, cfg.h + 0.14, cfg.z);
-      // Body (box)
-      const bodyGeo = new THREE.BoxGeometry(0.22, cfg.h, 0.12);
-      const body = new THREE.Mesh(bodyGeo, mat.clone());
-      body.position.set(cfg.x, cfg.h / 2, cfg.z);
-      group.add(head, body);
+  private async loadCrab(): Promise<void> {
+    const loader = new GLTFLoader();
+    try {
+      const gltf = await loader.loadAsync("/claude_crab.glb");
+      const crab = gltf.scene;
+
+      // Face toward new camera position (inside ring)
+      crab.rotation.y = -Math.PI * 0.875;
+
+      // Scale 1.5x
+      crab.scale.setScalar(1.5);
+
+      // Position at base of claudeGroup
+      crab.position.set(0, 0, 0);
+
+      this.claudeGroup.add(crab);
+      this.crabMesh = crab;
+      this.crabLoaded = true;
+
+      // Hide the placeholder logo plane and glow disc
+      const logoPlane = this.claudeGroup.getObjectByName("claudeLogoPlane");
+      if (logoPlane) logoPlane.visible = false;
+      const glowDisc = this.claudeGroup.getObjectByName("claudeGlowDisc");
+      if (glowDisc) glowDisc.visible = false;
+    } catch {
+      // GLB not available — keep existing placeholder behavior
+      this.crabLoaded = false;
+      this.crabMesh = null;
     }
-    return group;
   }
+
+  // ── Private: bubble management ──────────────────────────────────────────
+
+  /** Project the crab/placeholder head world position to screen pixels. */
+  private getCrabHeadScreen(): { x: number; y: number } {
+    const worldPos = new THREE.Vector3(
+      CLAUDE_PLACEHOLDER_POS.x,
+      1.5,
+      CLAUDE_PLACEHOLDER_POS.z
+    );
+    const ndc = worldPos.clone().project(this.camera);
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const x = (ndc.x * 0.5 + 0.5) * size.x;
+    const y = (-(ndc.y * 0.5) + 0.5) * size.y;
+    return { x, y };
+  }
+
+  /** Position the bubble DOM element above the crab head. */
+  private updateBubblePosition(): void {
+    const { x, y } = this.getCrabHeadScreen();
+    this.bubbleEl.style.left = x + "px";
+    this.bubbleEl.style.top = y + "px";
+  }
+
+  /** Show the analysis speech bubble with typewriter text. */
+  showAnalysisBubble(text: string, source: "claude" | "offline"): void {
+    const headerLabel = source === "claude" ? "CLAUDE ANALYSIS" : "CORNER NOTES";
+
+    this.bubbleEl.innerHTML = `
+      <div class="wii-bubble-header">
+        <span class="wii-bubble-icon">C</span>
+        <span class="wii-bubble-source">${escapeHtml(headerLabel)}</span>
+      </div>
+      <p id="wii-text"></p>
+      <button class="wii-bubble-ok">GOT IT</button>
+    `;
+
+    this.updateBubblePosition();
+    this.bubbleEl.classList.add("visible");
+
+    // Wire up the GOT IT button
+    const btn = this.bubbleEl.querySelector(".wii-bubble-ok") as HTMLButtonElement | null;
+    if (btn) {
+      btn.addEventListener("click", () => {
+        this.bubbleEl.classList.remove("visible");
+        clearTimeout(this.typewriterTimer);
+        this.exit();
+      });
+    }
+
+    // Typewriter effect
+    const p = this.bubbleEl.querySelector("#wii-text") as HTMLParagraphElement | null;
+    if (!p) return;
+
+    const safeText = escapeHtml(text);
+    let i = 0;
+    const type = () => {
+      if (i <= safeText.length) {
+        p.innerHTML = safeText.slice(0, i);
+        i++;
+        this.typewriterTimer = window.setTimeout(type, 18);
+      } else {
+        // Append blinking cursor after text finishes
+        p.innerHTML = safeText + '<span class="wii-cursor"></span>';
+      }
+    };
+    clearTimeout(this.typewriterTimer);
+    type();
+  }
+
+  // ── Private: scene building ─────────────────────────────────────────────
 
   private buildClaudePlaceholder(): THREE.Group {
     const group = new THREE.Group();
@@ -200,7 +286,6 @@ export class CornerScene {
     group.position.copy(CLAUDE_PLACEHOLDER_POS);
 
     // ── Claude logo — actual C-mark rendered on a canvas ────────────────────
-    // Canvas: 512×512. Orange disc + thick white C arc with rounded ends.
     const S = 512;
     const logoCanvas = document.createElement("canvas");
     logoCanvas.width = S;
@@ -225,9 +310,7 @@ export class CornerScene {
     ctx.stroke();
 
     // Claude C mark: thick white arc, rounded caps, soft glow
-    // canvas arc(x,y,r,start,end,false) goes CLOCKWISE in screen space (y-down).
-    // From gapAngle → 2π−gapAngle clockwise traces the C opening to the right.
-    const gapAngle = 0.72; // ≈41° each side → ~82° total opening (matches real C)
+    const gapAngle = 0.72;
     ctx.shadowColor = "rgba(255,210,160,0.75)";
     ctx.shadowBlur = 28;
     ctx.strokeStyle = "#ffffff";
@@ -250,9 +333,6 @@ export class CornerScene {
 
     const logoTex = new THREE.CanvasTexture(logoCanvas);
 
-    // Flat plane facing ring center.
-    // Claude is at (3.6, 0, 3.6); ring center at (0,0,0).
-    // Plane +Z normal must point toward (−1, 0, −1) → rotation.y = −3π/4.
     const logoPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(1.3, 1.3),
       new THREE.MeshBasicMaterial({ map: logoTex, transparent: true, side: THREE.DoubleSide })
@@ -288,7 +368,7 @@ export class CornerScene {
     // Orange point light for the logo glow
     const light = new THREE.PointLight(0xff6820, 4.5, 5, 2);
     light.name = "claudeLight";
-    light.position.set(0, 1.5, 0);
+    light.position.set(0, 1.2, 0);
     group.add(light);
 
     return group;
@@ -313,9 +393,9 @@ export class CornerScene {
 
     const deliver = (text: string, source: "claude" | "offline") => {
       if (!this.analysisFired && !this.animating && this.active) {
-        // Camera already settled, show immediately
+        // Camera already settled, show after dramatic pause
         this.analysisFired = true;
-        this.opts.onAnalysis?.(text, source);
+        window.setTimeout(() => this.showAnalysisBubble(text, source), 300);
       } else {
         // Store for when the camera animation finishes
         this.pendingAnalysis = { text, source };
@@ -336,15 +416,15 @@ export class CornerScene {
     } catch {
       const total = windows.reduce((s, w) => s + w.playerAttempts, 0);
       const landed = windows.reduce((s, w) => s + w.playerLanded, 0);
-      const won = req.result.won;
+      const wonResult = req.result.won;
       let fallback: string;
       if (total < 5) {
-        fallback = won
+        fallback = wonResult
           ? "You got the win but barely threw anything. Next time stay active — jab to find range, then follow up hard."
           : "You didn't throw enough for me to work with. Get your hands up, stay active, start with the jab.";
       } else {
         const rate = Math.round((landed / total) * 100);
-        fallback = won
+        fallback = wonResult
           ? `You landed ${landed} of ${total} shots and got the job done. Work on consistency — don't reset to the same spot after a combo.`
           : `You threw ${total} punches but only ${rate}% landed. Mix up your timing — when the same combo stops working, change it up immediately.`;
       }
