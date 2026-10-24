@@ -94,6 +94,10 @@ These are concrete MVP definitions derived from the proposal, not an assertion t
 
 `CvProvider` aligns Python/browser monotonic clocks, rejects stale or malformed samples, deduplicates movement IDs, checks sequence coverage, and clears transient input on disconnect/reset. `canScore` is an **input dispatch gate**, not a hit verdict. The example conservatively waits for valid dodge/head tracking before dispatching; hands can still be tracked while head initialization is pending. Synthetic and replay packets cannot score unless a caller explicitly enables test input. Always consume the provider's filtered `events`, not the raw packet's event array.
 
+The game classifies camera input in the browser by default, with a TypeScript port of this detector (`src/game/cv/local/` in the game repo). Players do not need this bridge; it is the tuning and replay tool, selected in the game with `?cvSource=bridge`. Keep the port in step: after a detector or config change, run `python scripts/export_parity_fixtures.py --out <game repo>/src/game/cv/local/fixtures` and the game's parity tests. Record real clips with `scripts/dump_landmarks.py` and add them with `--clip`.
+
+Running the bridge: macOS must allow your terminal app to use the camera (System Settings → Privacy & Security → Camera); the first run cannot show the prompt from the capture thread, so open the camera once from the main thread or grant it there. The bridge serves one game tab at a time and closes others with "One game client at a time".
+
 Run the frontend locally over HTTP for the simplest MVP. The bridge permits localhost HTTP origins and the deployed game at `https://claude-tyson.vercel.app` by default. An additional exact origin can be allowed with `--origin https://your-frontend.example`; that does not provide TLS or override browser mixed-content/local-network rules. A hosted HTTPS frontend may require a secure local bridge or a browser-native CV implementation. Keep the default loopback bind for this MVP.
 
 ## 4. Measure latency
