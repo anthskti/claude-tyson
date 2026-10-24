@@ -7,9 +7,9 @@ export type TrackingState = 'calibrating' | 'good' | 'degraded' | 'lost';
 // The kit only reports lateral displacement and coarse punch_left/right. These
 // optional fields carry richer classification once CV supports it; when absent the
 // game falls back to lateral thresholds and an 'unclassified' punch.
-export type Body = 'neutral' | 'lean_left' | 'lean_right' | 'lean_back';
+export type Body = 'neutral' | 'lean_left' | 'lean_right';
 export type Guard = 'neutral' | 'block';
-export type PunchType = 'jab' | 'straight' | 'hook' | 'uppercut';
+export type PunchType = 'left_straight' | 'right_straight' | 'left_hook' | 'right_hook';
 
 export interface PoseState {
   body: Body;
@@ -61,7 +61,7 @@ export interface MotionEvent {
   calibrationId: string | null;
   experimental: boolean;
   features?: Record<string, unknown>;
-  punchType?: PunchType; // proposed extension, only on punch_left / punch_right
+  punchType?: PunchType; // only on punch_left / punch_right; hand and name must agree
 }
 
 export interface CvSample {

@@ -19,7 +19,7 @@ The game is a short, readable boxing duel with stationary fighters. There is no 
 | Dodge left | Nose shifts to the fighter's anatomical left relative to shoulder center | Avoids either straight and left hook; vulnerable to right hook | Agreed |
 | Dodge right | Nose shifts to anatomical right | Avoids either straight and right hook; vulnerable to left hook | Agreed |
 | Left straight | Faster, lower-cost straight attack | 0.5 base damage (provisional) | Proposed balance |
-| Right straight | Slower, harder-to-throw straight attack | 1.3 base damage (provisional) | Proposed balance |
+| Right straight | Slower, more demanding straight attack | 1.3 base damage (provisional) | Proposed balance |
 | Left hook | Slower swinging punch | 1.0 base damage; beats block; 0 vs left dodge; 1.5× vs right dodge | Proposed balance |
 | Right hook | Slower swinging punch | 1.0 base damage; beats block; 0 vs right dodge; 1.5× vs left dodge | Proposed balance |
 | Hit reaction | Brief stagger when a hit lands | Temporarily prevents new actions | Proposed timing |
@@ -39,9 +39,9 @@ The game is a short, readable boxing duel with stationary fighters. There is no 
 *All damage values are provisional starting values. Hook-vs-block could instead deal reduced chip damage if full hook damage makes blocking feel useless; playtest this before locking it. If no valid hit opportunity exists, the result is `missed`, not `hit`. Block and dodge are mutually exclusive; reject conflicting starts.*
 
 ### Stamina (proposed first pass)
-Use a server-owned **100 point** stamina pool. Stamina limits repeated high-value actions, while punch type—not measured webcam speed—determines damage. Suggested costs: left straight **5**, right straight **12**, either hook **16**, dodge **20**. Holding block drains **4 points/second** after its 80 ms startup, with the existing 900 ms maximum duration; releasing it stops drain. Regenerate **12 points/second** while not attacking, dodging, or blocking. These are starting values, not locked balance.
+Use a server-owned **100 point** stamina pool. Stamina limits repeated high-value actions, while punch type—not measured webcam speed—determines damage. First implementation values: left straight **5**, right straight **12**, either hook **16**, dodge **20**. Holding block drains **4 points/second** after its 80 ms startup, with a 900 ms maximum duration and 300 ms release cooldown. Dodge has a 100 ms startup, 250 ms active window, and 260 ms release cooldown. Regenerate **12 points/second** while idle. These remain starting values for playtesting.
 
-At insufficient stamina, reject the action and return an authoritative reason; don't silently weaken a punch or allow negative stamina. Do not charge again for duplicate inputs. Ensure a player can always recover: regeneration continues while idle, and reaching zero does not disable movement-independent defense forever. Dodge is deliberately costly because it avoids straights; block remains the economical defense, but a hook can punish a held block. Tune costs and regeneration before adding exhaustion damage or speed penalties.
+At insufficient stamina, reject the action; don't silently weaken a punch or allow negative stamina. The current reducer rejects it without a client-facing reason, so feedback remains follow-up work. Do not charge again for duplicate inputs. Ensure a player can always recover: regeneration continues while idle, and reaching zero does not disable movement-independent defense forever. Dodge is deliberately costly because it avoids straights; block remains the economical defense, but a hook can punish a held block. Tune costs and regeneration before adding exhaustion damage or speed penalties.
 
 ## 3. Combat timing and action legality
 Gameplay must be judged in discrete server time, independently of which animation has completed rendering. Each move follows **startup → active window → recovery**. A hit only resolves once, at its scheduled impact window. Both humans and bots obey the same timing rules. A client may render immediately for responsiveness, but cannot award damage, declare a dodge successful, or issue a knockout.
@@ -51,13 +51,13 @@ Gameplay must be judged in discrete server time, independently of which animatio
 | Move | Startup | Active | Recovery | Notes |
 |---|---:|---:|---:|---|
 | Left straight | 120 ms | 100 ms | 220 ms | Fast and low cost |
-| Right straight | 200 ms | 100 ms | 320 ms | Slower, harder to land cleanly, more damage |
+| Right straight | 200 ms | 100 ms | 320 ms | Slower, more stamina, more damage |
 | Left/right hook | 220 ms | 120 ms | 360 ms | Slower, directional punish |
 | Dodge left/right | 100 ms | 250 ms | 260 ms | Dodge window must overlap impact |
 | Block | 80 ms | Up to 900 ms | 300 ms | Low stamina drain; hooks beat it |
 | Hit stagger | — | — | 250 ms | Cancels/restricts attacks according to one consistent policy |
 
-Those timings are **not** part of v4 contracts and should be constants under balancing review. Avoid reapplying a new action during recovery. Track action identity so one attack cannot deal damage twice. Reject impossible state transitions and repeated `block_start` / `dodge_start` spam. A tracking-loss event should prevent **new** human attacks while tracking is unreliable; do not retroactively revoke already accepted attacks.
+Those timings are provisional constants under balancing review. The first server implementation resolves each punch once at its scheduled startup impact; a sustained active hit window is not implemented yet. Avoid reapplying a new action during recovery. Track action identity so one attack cannot deal damage twice. Reject impossible state transitions and repeated block/dodge starts. A tracking-loss event prevents **new** human attacks while tracking is unreliable; an unscorable in-flight attack is excluded from the result statistics.
 
 **Proposed deterministic priority for an impact:** (1) match already finished → ignore; (2) defender already knocked out → ignore; (3) valid active block → `blocked`; (4) valid active dodge → lookup matchup; (5) otherwise hit if attack valid, else `missed`. The rule above makes a block more protective than a dodge when both would somehow overlap; the cleaner option is to enforce mutually exclusive defensive states so that case never occurs. Fix this rule before coding tests.
 
@@ -74,7 +74,7 @@ At health ≤ 0, clamp health to zero, emit a single match finish reason `knocko
 
 **Input failure behavior:** If MediaPipe loses reliable tracking, publish tracking loss, ignore newly inferred attacks, and show a neutral status indication. Already accepted actions and a finished bout remain authoritative. Do not send raw image frames, per-frame landmark histories, or client-reported damage to determine hits.
 
-**Punch classification:** Recognize left straight, right straight, left hook, and right hook only. Keep classification simple and consistent; reject uncertain punches instead of incorrectly turning ambiguous movement into high-damage hooks. **Recommendation for speed/power:** use wrist speed only to determine whether a punch crossed a calibrated recognition threshold; do not send client-reported speed or use it to multiply damage. Webcam distance, frame rate, and tracking noise make speed a poor authority signal. Keep power fixed by punch type on the server. If faster punches later need to feel stronger, first measure recognition reliability, then consider a small bounded speed tier that changes startup or animation only, never damage. The contract's optional `speed01` should remain unused until its trust and gameplay purpose are agreed. Left/right naming is anatomical; left straight is the quicker, lighter move and right straight is slower, stronger for the MVP's orthodox stance assumption.
+**Punch classification:** Recognize left straight, right straight, left hook, and right hook only. Keep classification simple and consistent; reject uncertain punches instead of incorrectly turning ambiguous movement into high-damage hooks. **Recommendation for speed/power:** use wrist speed only as a local recognition threshold; don't send client-reported speed or use it to multiply damage. Webcam distance, frame rate, and tracking noise make speed a poor authority signal. Keep power fixed by punch type on the server. The implemented contract has no speed field. Left/right naming is anatomical; the MVP assumes left straight is quicker and lighter and right straight is slower and stronger.
 
 ## 5. Deterministic scripted opponent (works without Claude)
 The bot is a real combat participant, not an animation playlist. It observes the current combat situation, selects legal actions, and commits to startup/active/recovery just like a human. The script remains fully playable even when Claude has not responded, is disabled, or produces invalid output.
@@ -105,7 +105,7 @@ else:
 This is **not a promise that the bot can predict an unseen punch**. Threat awareness is limited to observable/accepted match events and the configured reaction delay. Different reaction rolls should not create multiple defensive actions for one threat.
 
 ### Default weights and bounded human imperfections (proposed)
-- Punch selection: jab 45%, cross 30%, left hook 12.5%, right hook 12.5% before normalization.
+- Punch selection: left straight 45%, right straight 30%, left hook 12.5%, right hook 12.5% before normalization.
 - Favor short pauses rather than constant punching; attack cadence can rise with aggression.
 - Reaction delay starting band: **250–650 ms**, subject to playtesting and CV input latency. Do not drop to zero.
 - Block / dodge / counter probability fields live in [0,1]; successful outcomes are **not guaranteed** even when the action is chosen.
@@ -115,7 +115,7 @@ This is **not a promise that the bot can predict an unseen punch**. Threat aware
 Claude is a **strategist**, never a hit referee. It may update the bot's tactical tendencies, but not the rules. A strategy is a bounded recommendation and may be delayed, stale, or rejected without interrupting the bout.
 
 **Claude may suggest:**
-- `punchWeights` for jab, cross, left hook, right hook.
+- `punchWeights` for left straight, right straight, left hook, right hook.
 - `guardBias` in [-1,1] to cover the player's habitual attack lane.
 - `dodgeBias` in [-1,1] to favor left/right defense.
 - `counterPreference01` in [0,1] to reward punishing predictable attacking patterns.
@@ -123,7 +123,7 @@ Claude is a **strategist**, never a hit referee. It may update the bot's tactica
 **Claude must not set:** health, damage, knockout, hit result, timing truth, fighter state, winner, secret difficulty level, or unrestricted reaction time. It must not introduce uppercuts, footwork, combos, or moves the player cannot perform.
 
 ### Example strategic interpretation
-- A player overuses jabs → increase defensive attention toward that attack and counter frequency, within limits.
+- A player overuses left straights → increase defensive attention toward that attack and counter frequency, within limits.
 - A player repeatedly dodges right → prefer **left hook**, since a left hook lands for 1.5× against a right dodge.
 - A player repeatedly dodges left → prefer **right hook**, for the symmetric matchup.
 - A player blocks frequently → vary approach timing and attack choice; **do not hallucinate an unblockable uppercut**.
@@ -135,7 +135,7 @@ Claude is a **strategist**, never a hit referee. It may update the bot's tactica
   "hypothesis": "Player dodges right after straight punches",
   "confidence01": 0.78,
   "patch": {
-    "punchWeights": { "left_hook": 0.42, "jab": 0.28 },
+    "punchWeights": { "left_hook": 0.42, "left_straight": 0.28 },
     "dodgeBias": -0.15,
     "counterPreference01": 0.62
   },
@@ -168,7 +168,7 @@ Do not let strategy and difficulty both independently multiply the same offensiv
 ## 8. Player memory and post-fight coaching
 A fighter's identity is keyed by an immutable `playerId`, not their nickname. Every completed match can contribute **validated aggregates** to that player's long-term style profile. Keep raw combat history available for replay/diagnostics if desired, but do not ask Claude to ingest entire lifetime event logs for each match.
 
-**Current persistent style dimensions:** jab share, left-punch share, left-dodge share, block rate, hit rate, confidence, sample matches, and readable behavioral tags. Updates should be sample-size-aware so one unusual match doesn't redefine a player's identity.
+**Current persistent style dimensions:** left/right straight shares, left/right hook shares, dodge direction, block rate, hit rate, confidence, sample matches, and readable behavioral tags. Updates should be sample-size-aware so one unusual match doesn't redefine a player's identity.
 
 **Post-fight analysis** is the only user-facing commentary in the MVP. It should identify concrete strengths, specific weaknesses, and a single next-session focus, all grounded in counts or observed comparisons. Avoid saying a behavior caused an outcome when only correlation was observed. PvP can produce a separate analysis for each participant. No mid-fight coach or spoken commentary.
 
@@ -194,7 +194,7 @@ These are gameplay invariants to verify before visual polish:
 | PvP instead of bot | Exactly the same damage/defense/KO rules |
 
 ## 10. Decisions not yet locked
-1. **Damage and matchup values:** starting proposal is left straight 0.5, right straight 1.3, hooks 1.0, cross-dodge hook multiplier 1.5, and hooks deal base damage through block. Confirm with playtesting.
+1. **Damage and matchup values:** implementation starts at left straight 0.5, right straight 1.3, hooks 1.0, opposite-dodge hook multiplier 1.5, and hooks deal base damage through block. Confirm with playtesting.
 2. **Frame/timing numbers:** all startup, active, recovery, and block limits above are starting suggestions.
 3. **Simultaneous double KO:** choose draw or fixed ordering; avoid arbitrary network-order wins.
 4. **Hook vs block:** this draft proposes hooks beat block, while straights are fully blocked. Test whether hooks should deal full damage or reduced chip through block.
@@ -205,12 +205,11 @@ These are gameplay invariants to verify before visual polish:
 ## 11. Suggested implementation order
 Keep the first pass small and tune from playtests:
 
-1. **Reconcile the contract and live server rules:** update `CONTRACTS.md`, then `spacetimedb/src/rules.ts` and `spacetimedb/src/index.ts` so the four-punch vocabulary, server damage/timing, defenses, and terminal KO agree. The current server rules still include uppercuts and per-side guards, so they differ from this MVP spec.
-2. **Complete authoritative input validation:** in `spacetimedb/src/index.ts`, validate action states, dedupe/order, match membership, tracking quality, and server timestamps; make impact resolution single-use and match-scoped. Regenerate `src/game/module_bindings/` after schema changes.
-3. **Connect local recognition:** adapt `input/motion.ts` and `src/game/cv/contract.ts` to emit the four supported punch actions plus block/dodge start/end and tracking changes. Keep raw landmarks local; speed stays a local threshold only.
-4. **Align the client:** update `src/game/main.ts`, `src/game/net/server.ts`, HUD and `src/game/scene/` to submit actions and render subscribed server outcomes, including one-time KO. Keep `engine/engine.ts` and the standalone arena as prototypes unless deliberately migrated; don't treat them as online authority.
-5. **Add bot and persistence behavior:** refine the scripted bot, bounded strategy updates, match outcomes, and profile aggregates only after human combat resolution is stable.
-6. **Tune incrementally:** verify the damage/defense matrix, timing and spam, KO, tracking loss, simultaneous attacks, and isolation between matches using repository command `bun run test`; then playtest the browser flow. No new dependency or environment variable is expected.
+1. **Authoritative combat:** the SpacetimeDB rules and reducers now use the four-punch vocabulary, server damage, stamina, and defense timing. Tune values through playtests.
+2. **Input and security:** action membership, duplicate IDs, tracking status, and stamina are checked server-side. Per-connection sequence ordering and explicit action-rejection feedback still need work.
+3. **Real camera recognition:** the online page still uses `SimulatedCvProvider`; connect a MediaPipe provider through `src/game/cv/contract.ts` and classify only the four supported punches plus dodge/block/tracking.
+4. **Bot and profile polish:** bot attacks use the shared damage/defense resolver, but its defense is still a simple random response and strategy weights keep some legacy field names. Refine after human input is connected.
+5. **Tune:** verify match isolation and simultaneous impacts, then playtest damage, stamina, timing, and dodge thresholds in the browser. No new dependency or environment variable is required for the current code changes.
 
 **Primary blast radius:** shared `CONTRACTS.md`, SpacetimeDB combat and reducers, generated bindings, CV/input adapter, and game client rendering. Risks to resolve during implementation include deterministic simultaneous-hit ordering, tracking loss during an accepted attack, and keeping all state isolated by match ID. `docs/PROJECT_CONTEXT.md` referenced by the planning workflow is absent in this checkout; `CLAUDE.md` and the current source were used instead.
 

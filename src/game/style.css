@@ -23,6 +23,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07080c; }
 .bar.opp .track { display: flex; justify-content: flex-end; }
 .fill { height: 100%; transition: width 0.15s ease-out; }
 .bar.me .fill { background: var(--red); }
+.bar.me .stamina { height: 5px; }
+.bar.me .stamina .fill { background: var(--good); }
 .bar.opp .fill { background: var(--blue); }
 .timer { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 72px; text-align: center; }
 

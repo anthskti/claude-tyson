@@ -35,7 +35,7 @@ export class Hud {
     this.actions = actions;
     this.root.innerHTML = `
       <div class="bars">
-        <div class="bar me"><span class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div></div>
+        <div class="bar me"><span class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div><div class="track stamina"><div id="stamina-me" class="fill"></div></div></div>
         <div id="timer" class="timer">3:00</div>
         <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div></div>
       </div>
@@ -49,7 +49,7 @@ export class Hud {
       <div id="telegraph" class="telegraph"></div>
       <div class="keys">
         body <b>A</b>/<b>D</b> slip · <b>S</b> lean back &nbsp;|&nbsp; guard <b>Q</b>/<b>E</b> one side · <b>W</b> both &nbsp;|&nbsp;
-        left <b>J</b> jab · <b>U</b> hook · <b>M</b> upper &nbsp;|&nbsp; right <b>K</b> straight · <b>I</b> hook · <b>,</b> upper
+        left straight <b>J</b> · left hook <b>U</b> &nbsp;|&nbsp; right straight <b>K</b> · right hook <b>I</b>
         &nbsp;|&nbsp; <b>T</b> lose tracking · <b>C</b> recalibrate
       </div>`;
     this.root.addEventListener('click', this.onClick);
@@ -87,7 +87,7 @@ export class Hud {
         <div class="label">Bot strategy · rev ${strat.revision}</div>
         <div class="explain">${escapeHtml(strat.explanation)}</div>
         <div class="nums">aggr ${strat.aggression.toFixed(2)} · interval ${strat.punchIntervalMs}ms ·
-          mix J/S/H/U ${[strat.jabWeight, strat.straightWeight, strat.hookWeight, strat.uppercutWeight].map(w => w.toFixed(2)).join('/')} ·
+          mix L/R/H ${[strat.jabWeight, strat.straightWeight, strat.hookWeight].map(w => w.toFixed(2)).join('/')} ·
           left ${(strat.leftBias * 100).toFixed(0)}% · defends ${(strat.defenseRate * 100).toFixed(0)}% ·
           telegraph ${strat.telegraphMs}ms</div>`;
     }
@@ -96,7 +96,7 @@ export class Hud {
     el('pause').style.display = paused ? 'flex' : 'none';
     if (paused) {
       el('pause').innerHTML = `<div><h2>${s.tracking === 'calibrating' ? 'Calibrating…' : 'Tracking lost'}</h2>
-        <p>${s.trackingReason ?? 'Step back into frame and return to guard.'}</p>
+        <p>${s.trackingReason ?? 'Step back into frame so tracking can recover.'}</p>
         <p class="dim">The bot holds fire and incoming hits are unscorable until tracking recovers.</p></div>`;
     }
   }
@@ -114,7 +114,7 @@ export class Hud {
     const profileHtml = p
       ? `<div class="profile">
           <div><b>${p.wins}</b>-<b>${p.losses}</b> in ${p.matchesPlayed} fights</div>
-          <div>jab ${p.jabs} · straight ${p.straights} · hook ${p.hooks} · upper ${p.uppercuts} · landed ${p.punchesLanded} · counters ${p.counters}</div>
+          <div>straights ${p.straights} · hooks ${p.hooks} · landed ${p.punchesLanded} · counters ${p.counters}</div>
           <div>of ${p.defenseOpportunities} incoming: slipped ${p.slips} · leaned back ${p.leanBacks} · blocked ${p.blocks} · hit ${p.hitsTaken}</div>
         </div>`
       : '';
@@ -134,8 +134,9 @@ export class Hud {
 
   tick(view: MatchView | undefined) {
     const active = view?.match.status === 'active';
-    el('hp-me').style.width = `${view ? Math.max(0, view.me.health) : 100}%`;
-    el('hp-opp').style.width = `${view ? Math.max(0, view.opponent.health) : 100}%`;
+    el('hp-me').style.width = `${view ? Math.max(0, view.me.health / 10) : 100}%`;
+    el('hp-opp').style.width = `${view ? Math.max(0, view.opponent.health / 10) : 100}%`;
+    el('stamina-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.stamina)) : 100}%`;
     let remaining = 180;
     if (active) {
       const endsMs = Number(view.match.endsAt.microsSinceUnixEpoch / 1000n);
@@ -145,7 +146,7 @@ export class Hud {
   }
 
   renderPose(pose: PoseState) {
-    const body = { neutral: 'NEUTRAL', lean_left: '◀ SLIP LEFT', lean_right: 'SLIP RIGHT ▶', lean_back: '▼ LEAN BACK' }[pose.body];
+    const body = { neutral: 'NEUTRAL', lean_left: '◀ DODGE LEFT', lean_right: 'DODGE RIGHT ▶' }[pose.body];
     const g = (on: boolean) => (on ? 'BLOCK' : '—');
     el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}</span>`;
   }

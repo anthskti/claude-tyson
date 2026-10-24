@@ -8,7 +8,7 @@ import { BoxingAnimationController, type ClipSlot, type HeldSlot } from './anima
 // First-person gloves stay primitive: there is no player body model.
 
 export type Hand = 'left' | 'right';
-export type AnyPunch = PunchType | 'unclassified';
+export type AnyPunch = PunchType;
 const HANDS = ['left', 'right'] as const;
 
 const BOT_URL = '/claude_bot.glb';
@@ -22,22 +22,17 @@ const BOT_POSITION = new THREE.Vector3(0, 0, -2.6);
  */
 function punchOffset(type: AnyPunch, s: number, reach: number) {
   switch (type) {
-    case 'hook':
+    case 'left_hook': case 'right_hook':
       return { forward: reach * 0.8 * s, up: 0.04 * s, out: 0.35 * Math.sin(s * Math.PI) - 0.9 * s };
-    case 'uppercut':
-      return { forward: reach * 0.7 * s, up: -0.25 * Math.sin((1 - s) * Math.PI / 2) + 0.1 * s, out: -0.8 * s };
-    case 'straight':
+    case 'left_straight': case 'right_straight':
       return { forward: reach * s, up: 0.05 * s, out: -0.85 * s };
-    default:
-      return { forward: reach * 0.8 * s, up: 0.04 * s, out: -0.6 * s };
   }
 }
 
-/** `jab` (left straight) uses the jab slot; `straight` (right straight) uses the cross slot. Uppercut has no clip. */
+/** Straights keep the available jab/cross animation clips; action names stay anatomical. */
 function punchSlot(hand: Hand, type: AnyPunch): ClipSlot {
-  if (type === 'hook') return hand === 'left' ? 'left_hook' : 'right_hook';
-  if (type === 'straight' || (type === 'uppercut' && hand === 'right')) return 'cross';
-  return 'jab';
+  if (type.endsWith('_hook')) return hand === 'left' ? 'left_hook' : 'right_hook';
+  return hand === 'left' ? 'jab' : 'cross';
 }
 
 /** Anatomical defence. Lean-back is not a contract action, so it stays on idle. */
@@ -142,8 +137,8 @@ export class PlayerGloves {
   readonly root = new THREE.Group();
   private gloves: Record<Hand, THREE.Mesh>;
   private punchAt: Record<Hand, { t: number; type: AnyPunch }> = {
-    left: { t: -Infinity, type: 'jab' },
-    right: { t: -Infinity, type: 'jab' },
+    left: { t: -Infinity, type: 'left_straight' },
+    right: { t: -Infinity, type: 'right_straight' },
   };
   private guard: Record<Hand, Guard> = { left: 'neutral', right: 'neutral' };
   private target: Record<Hand, THREE.Vector3> = {

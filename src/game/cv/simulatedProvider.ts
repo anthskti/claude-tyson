@@ -12,26 +12,26 @@ import type {
 // Keyboard stand-in for the real CV provider. Emits contract-shaped observations at
 // ~30 Hz and discrete MotionEvents, so the rest of the game can't tell the difference.
 //
-//   Body (hold)    A slip left · D slip right · S lean back
+//   Body (hold)    A slip left · D slip right
 //   Guard (hold)   Q left block · E right block · W both
-//   Left fist      J jab · U hook · M uppercut
-//   Right fist     K straight · I hook · , uppercut
+//   Left fist      J left straight · U left hook
+//   Right fist     K right straight · I right hook
 //   T toggle tracking lost · C recalibrate
 
 export const SIM_KEYS: Record<string, { hand: 'left' | 'right'; type: PunchType }> = {
-  j: { hand: 'left', type: 'jab' },
-  u: { hand: 'left', type: 'hook' },
-  m: { hand: 'left', type: 'uppercut' },
-  k: { hand: 'right', type: 'straight' },
-  i: { hand: 'right', type: 'hook' },
-  ',': { hand: 'right', type: 'uppercut' },
+  j: { hand: 'left', type: 'left_straight' },
+  u: { hand: 'left', type: 'left_hook' },
+  k: { hand: 'right', type: 'right_straight' },
+  i: { hand: 'right', type: 'right_hook' },
 };
 
 const SAMPLE_HZ = 30;
 const SLIP_TARGET = 0.6; // body widths
 const DODGE_ENTER = 0.35;
 const DODGE_EXIT = 0.15;
-const PUNCH_EXTEND_MS: Record<PunchType, number> = { jab: 160, straight: 230, hook: 300, uppercut: 330 };
+const PUNCH_EXTEND_MS: Record<PunchType, number> = {
+  left_straight: 160, right_straight: 230, left_hook: 300, right_hook: 300,
+};
 const CALIBRATION_MS = 800;
 
 export class SimulatedCvProvider implements CvProvider {
@@ -104,7 +104,6 @@ export class SimulatedCvProvider implements CvProvider {
   }
 
   private body(): Body {
-    if (this.held.has('s')) return 'lean_back';
     const left = this.held.has('a');
     const right = this.held.has('d');
     if (left === right) return 'neutral';
@@ -178,7 +177,7 @@ export class SimulatedCvProvider implements CvProvider {
     const body = this.body();
     // Unmirrored camera: the player's anatomical left shows up on image-right.
     const headX = 0.5 - this.lateral * 0.15;
-    const headY = body === 'lean_back' ? 0.24 : 0.3;
+    const headY = 0.3;
     const wrist = (hand: 'left' | 'right') => {
       const side = hand === 'left' ? 1 : -1;
       const extending = this.punchUntil[hand] > now;

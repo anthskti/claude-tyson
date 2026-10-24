@@ -76,12 +76,11 @@ const server = new GameServer({
   },
   onAttackResolved(atk, v) {
     if (atk.result === 'cancelled') return;
-    const counter = atk.counter && atk.result !== 'dodged' ? ' · COUNTER' : '';
     if (atk.attackerSlot === v.me.slot) {
       if (v.match.mode === 'bot') opponent.showDefense(atk.defenderBody as Body, atk.defenderGuard);
       if (atk.result === 'landed') opponent.takeHit();
       const text = OFFENSE_TEXT[atk.detail] ?? atk.result;
-      hud.toast(atk.damage > 0 ? `${text} −${atk.damage}${counter}` : text, atk.damage > 0 ? 'good' : 'info');
+      hud.toast(atk.damage > 0 ? `${text} −${(atk.damage / 10).toFixed(1)}` : text, atk.damage > 0 ? 'good' : 'info');
       return;
     }
     hud.clearTelegraph();
@@ -93,7 +92,7 @@ const server = new GameServer({
     if (atk.damage > 0) {
       hud.flashDamage();
       shakeUntil = performance.now() + 220;
-      hud.toast(`${text} −${atk.damage}${counter}`, 'bad');
+      hud.toast(`${text} −${(atk.damage / 10).toFixed(1)}`, 'bad');
     } else {
       hud.toast(atk.result === 'dodged' ? `${text} · counter ready` : text, 'good');
     }
@@ -134,7 +133,7 @@ cv.start((obs, events) => {
   gloves.setGuard('right', myPose.guards.right);
   // Animate locally right away; the server decides whether it lands.
   for (const ev of events) {
-    const type = ev.punchType ?? 'unclassified';
+    const type = ev.punchType ?? (ev.type === 'punch_left' ? 'left_straight' : 'right_straight');
     if (ev.type === 'punch_left') gloves.punch('left', type);
     if (ev.type === 'punch_right') gloves.punch('right', type);
   }
@@ -157,7 +156,7 @@ renderer.setAnimationLoop(() => {
   // Player dodge: slide + slight roll from the CV lateral displacement.
   const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;
   const targetX = EYE.x + lateral * BODY_WIDTH_M;
-  const leanBack = myPose.body === 'lean_back' ? 1 : 0;
+  const leanBack = 0;
   camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 18);
   camera.position.z += (EYE.z + leanBack * 0.32 - camera.position.z) * Math.min(1, dt * 18);
   camera.rotation.z = -lateral * 0.12;
