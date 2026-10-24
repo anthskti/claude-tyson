@@ -108,3 +108,30 @@ test('a fighter cannot punch while leaning or lean while a punch is out', () => 
   h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose('lean_right'), matchId: match.id }));
   expect(me().bodyState).toBe('neutral');
 });
+
+test('one glove up is not a guard: only both gloves block and drain stamina', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  const player = auth();
+  h.withReducerTx(player, ctx => (mod.startBotMatch as any)(ctx));
+  const match = [...h.db.fightMatch.iter()][0];
+  const guard = (left: string, right: string) => h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, {
+    ...pose('neutral', left, right), matchId: match.id,
+  }));
+  const me = () => [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+
+  guard('block', 'neutral');
+  clock.advance(ms(500));
+  guard('block', 'neutral');
+  expect(me().stamina).toBe(100); // no drain: a single glove isn't blocking
+
+  guard('neutral', 'block');
+  clock.advance(ms(500));
+  guard('neutral', 'block');
+  expect(me().stamina).toBe(100);
+
+  guard('block', 'block');
+  clock.advance(ms(500));
+  guard('block', 'block');
+  expect(me().stamina).toBeCloseTo(98);
+});

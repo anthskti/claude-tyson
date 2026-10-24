@@ -34,7 +34,7 @@ export const OFFENSE_TEXT: Record<string, string> = {
 export const RULES_HTML = `
   <table class="rules">
     <tr><th>Defence</th><th>Beats</th><th>Beaten by</th></tr>
-    <tr><td>Block · 4 stamina/s</td><td>either straight</td><td><b>either hook</b></td></tr>
+    <tr><td>Block (both gloves) · 4 stamina/s</td><td>either straight</td><td><b>either hook</b></td></tr>
     <tr><td>Dodge · 20 stamina</td><td>either straight + same-side hook</td><td><b>opposite hook</b> (×1.5)</td></tr>
   </table>
   <div class="dim">Left straight: 0.5 damage / 5 stamina. Right straight: 1.3 / 12. Hooks: 1.0 / 16.

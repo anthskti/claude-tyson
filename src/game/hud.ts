@@ -65,7 +65,7 @@ export class Hud {
       <div id="pose" class="pose"></div>
       <div id="telegraph" class="telegraph"></div>
       <div class="keys">
-        body <b>A</b>/<b>D</b> slip · <b>S</b> lean back &nbsp;|&nbsp; guard <b>Q</b>/<b>E</b> one side · <b>W</b> both &nbsp;|&nbsp;
+        body <b>A</b>/<b>D</b> slip · <b>S</b> lean back &nbsp;|&nbsp; guard <b>W</b> (or <b>Q</b>+<b>E</b>) both gloves &nbsp;|&nbsp;
         left straight <b>J</b> · left hook <b>U</b> &nbsp;|&nbsp; right straight <b>K</b> · right hook <b>I</b>
         &nbsp;|&nbsp; <b>T</b> lose tracking · <b>C</b> recalibrate
       </div>`;
@@ -191,7 +191,7 @@ export class Hud {
   renderPose(pose: PoseState) {
     const body = { neutral: 'NEUTRAL', lean_left: '◀ DODGE LEFT', lean_right: 'DODGE RIGHT ▶' }[pose.body];
     const g = (on: boolean) => (on ? 'BLOCK' : '—');
-    el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}</span>`;
+    el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}${pose.guards.left !== pose.guards.right ? ' · both gloves to block' : ''}</span>`;
   }
 
   /** Pre-match camera calibration overlay; pass undefined to hide it. */

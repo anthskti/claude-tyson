@@ -341,14 +341,22 @@ function isPast(ctx: Ctx, ts: Timestamp): boolean {
   return nowMicros(ctx) >= ts.microsSinceUnixEpoch;
 }
 
+/** A block takes both gloves up; one glove alone is not a guard. */
+function bothGuards(left: string, right: string): boolean {
+  return asGuard(left) === 'block' && asGuard(right) === 'block';
+}
+
+/** Both gloves up, and neither out throwing a punch. */
+function guardReady(ctx: Ctx, f: Fighter): boolean {
+  return bothGuards(f.leftGuard, f.rightGuard) && isPast(ctx, f.leftReadyAt) && isPast(ctx, f.rightReadyAt);
+}
+
 function refreshStamina(ctx: Ctx, f: Fighter): Fighter {
   const elapsedMs = Math.max(0, msSince(ctx, f.staminaAt));
   if (elapsedMs === 0) return f;
-  const blocking = (asGuard(f.leftGuard) === 'block' || asGuard(f.rightGuard) === 'block')
+  const blocking = guardReady(ctx, f)
     && !f.blockLockedUntilRelease
-    && msSince(ctx, f.defenseStartedAt) <= BLOCK_MAX_MS
-    && ((asGuard(f.leftGuard) === 'block' && isPast(ctx, f.leftReadyAt))
-      || (asGuard(f.rightGuard) === 'block' && isPast(ctx, f.rightReadyAt)));
+    && msSince(ctx, f.defenseStartedAt) <= BLOCK_MAX_MS;
   const dodging = asBody(f.bodyState) !== 'neutral';
   const attacking = !isPast(ctx, f.leftReadyAt) || !isPast(ctx, f.rightReadyAt);
   const delta = blocking
@@ -549,16 +557,14 @@ function poseIsUsable(ctx: Ctx, f: Fighter): boolean {
     && msSince(ctx, f.poseAt) <= POSE_FRESH_MS;
 }
 
-/** A guard only counts if that hand isn't currently out throwing a punch. */
+/** A guard only counts with both gloves up and neither out throwing a punch. */
 function defenderState(ctx: Ctx, f: Fighter): DefenderState {
   const age = msSince(ctx, f.defenseStartedAt);
   const body = age >= DODGE_STARTUP_MS && age <= DODGE_WINDOW_MS ? asBody(f.bodyState) : 'neutral';
   return {
     body,
     blocking: age >= BLOCK_STARTUP_MS && age <= BLOCK_MAX_MS && isPast(ctx, f.blockReadyAt)
-      && !f.blockLockedUntilRelease && body === 'neutral'
-      && ((asGuard(f.leftGuard) === 'block' && isPast(ctx, f.leftReadyAt))
-        || (asGuard(f.rightGuard) === 'block' && isPast(ctx, f.rightReadyAt))),
+      && !f.blockLockedUntilRelease && body === 'neutral' && guardReady(ctx, f),
   };
 }
 
@@ -749,10 +755,9 @@ export const updatePose = spacetimedb.reducer(
     const canBlock = bodyState === 'neutral' && stamina > 0;
     const good = args.trackingState === 'good' || (args.trackingState === 'degraded' && args.dodgeValid);
     const defenseChanged = bodyState !== me.bodyState
-      || ((asGuard(args.leftGuard) === 'block' || asGuard(args.rightGuard) === 'block')
-        !== (asGuard(me.leftGuard) === 'block' || asGuard(me.rightGuard) === 'block'));
-    const wasBlocking = asGuard(me.leftGuard) === 'block' || asGuard(me.rightGuard) === 'block';
-    const wantsBlock = bodyState === 'neutral' && (asGuard(args.leftGuard) === 'block' || asGuard(args.rightGuard) === 'block');
+      || bothGuards(args.leftGuard, args.rightGuard) !== bothGuards(me.leftGuard, me.rightGuard);
+    const wasBlocking = bothGuards(me.leftGuard, me.rightGuard);
+    const wantsBlock = bodyState === 'neutral' && bothGuards(args.leftGuard, args.rightGuard);
     const blockExpired = wasBlocking && msSince(ctx, me.defenseStartedAt) >= BLOCK_MAX_MS;
     const blockLockedUntilRelease = wantsBlock
       ? me.blockLockedUntilRelease || blockExpired
