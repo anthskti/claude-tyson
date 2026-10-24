@@ -12,6 +12,10 @@ import { createCoachAudio } from '../../coach/browserAudio';
 import { attackToRawEvent, matchToFightRow } from './coachBridge';
 import type { Capability } from '../../shared/contracts';
 
+/** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
+export function startGame(): () => void {
+let alive = true;
+
 // ─── Scene ─────────────────────────────────────────────────────────────────
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -23,7 +27,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 const scene = new THREE.Scene();
 buildArena(scene);
-loadRing().then(ring => scene.add(ring));
+loadRing().then(ring => {
+  if (alive) scene.add(ring);
+});
 
 // First-person: the player stands just south of centre, facing the opponent (-Z).
 const EYE = new THREE.Vector3(0, 1.62, 0.55);
@@ -228,3 +234,15 @@ renderer.setAnimationLoop(() => {
   }
   renderer.render(scene, camera);
 });
+
+return () => {
+  alive = false;
+  renderer.setAnimationLoop(null);
+  window.removeEventListener('resize', resize);
+  cv.stop();
+  coachAudio.stop();
+  server.close();
+  hud.dispose();
+  renderer.dispose();
+};
+}

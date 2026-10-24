@@ -6,7 +6,7 @@ description: Use when asked to build a feature, make a code change, or carry out
 # Implement
 
 1. **Read before writing.** Read `AGENTS.md`, `CLAUDE.md`, and the neighboring modules. Mirror their naming, types, and error handling. Use the repo's actual scripts; don't invent commands or add dependencies without asking first.
-2. **Make surgical edits.** Keep pure combat rules in `engine/`, reducers in `spacetimedb/src/`, camera classification in `input/`, coach logic in `coach/`, and rendering in `client/`. Don't reformat or refactor unrelated code. After editing `engine/engine.ts`, run `./sync-engine.sh` so `spacetimedb/src/engine.ts` matches.
+2. **Make surgical edits.** Keep pure combat rules in `engine/`, reducers in `spacetimedb/src/`, camera classification in `input/`, coach logic in `coach/`, and rendering in `src/game/`. Don't reformat or refactor unrelated code. After editing `engine/engine.ts`, run `./sync-engine.sh` so `spacetimedb/src/engine.ts` matches.
 3. **Honor the boundaries.**
    - Wire changes in `shared/contracts.ts` stay additive and are marked `v1.1`. Don't silently change contracts.
    - The client never sends damage, hit decisions, a winner, or raw webcam frames. Server time decides hits.

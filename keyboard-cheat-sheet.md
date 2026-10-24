@@ -2,7 +2,7 @@
 
 The client uses a keyboard stand-in for the webcam. Keys are the player's own body: A is your anatomical left. Holds last until you release the key. The first ~1 second after load (and after C) is calibration; punches during that window are ignored.
 
-Start the scene from `client/` with `npm run dev`. Shadowboxing (your gloves) works with the server offline. The opponent only punches, blocks, and reacts once a match is running (`spacetime start`, then publish the module, then **Fight adaptive bot**).
+Start the scene from the repo root with `bun run dev` (http://localhost:3001). Shadowboxing (your gloves) works with the server offline. The opponent only punches, blocks, and reacts once a match is running (`spacetime start`, then publish the module, then **Fight adaptive bot**).
 
 ## Movement and guard
 

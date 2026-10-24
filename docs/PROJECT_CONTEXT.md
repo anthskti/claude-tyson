@@ -251,7 +251,7 @@ route files, playable arena with the coach (`dev/arena.html`, `bun dev/server.ts
 - Opponent taunts (second Cartesia voice, `persona: "opponent"`)
 - Python CV bridge (WebSocket) feeding `input/cvKit.ts`
 - Persistent player profile, cross-fight memory, PvP lobby
-- `client/fightClient.ts` not yet typechecked against generated bindings (needs the `spacetime` CLI)
+- `src/game/fightClient.ts` not yet typechecked against generated bindings (needs the `spacetime` CLI)
 
 ## 10. Demo we're aiming for
 

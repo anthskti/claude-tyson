@@ -135,7 +135,7 @@ function canvasTopY(root: THREE.Object3D): number | null {
   return top;
 }
 
-export async function loadRing(url = '/models/boxing_ring.glb'): Promise<THREE.Object3D> {
+export async function loadRing(url = '/boxing_ring.glb'): Promise<THREE.Object3D> {
   try {
     const gltf = await new GLTFLoader().loadAsync(url);
     gltf.scene.traverse(o => {

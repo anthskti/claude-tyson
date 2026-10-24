@@ -19,8 +19,7 @@ Submission deadline: Devpost, Sunday Oct 25, 9:00 AM; live demo judging 10:30 AM
   scheduler (one voice at a time), effect measurement (AdaptationResult). `coach/liveCoach.ts` ties it together.
 - Inputs: `input/cvKit.ts` (Hani's kit `cv_sample` messages, per docs/INTEGRATION_CONTRACT.md),
   `input/keyboard.ts`, `input/motion.ts` (browser MediaPipe alternative).
-- `client/fightClient.ts`: real game client (needs `spacetime generate` bindings in client/module_bindings).
-- `next/app/api/{coach,tts}/route.ts`: drop-in Next.js routes. `dev/server.ts` + `dev/arena.html`: playable test arena.
+- `src/game/` is the fight scene and SpacetimeDB client (`src/game/fightClient.ts`, bindings in `src/game/module_bindings`). `src/app/page.tsx` mounts it. `bun run dev` serves the fight at http://localhost:3001.
 
 ## Rules that matter
 - Capabilities decide what the coach can say. CV kit = punch_coarse, dodge, lean (no punch types, no guard).
@@ -33,10 +32,9 @@ Submission deadline: Devpost, Sunday Oct 25, 9:00 AM; live demo judging 10:30 AM
 - `bun dev/server.ts` -> http://localhost:8787 arena with coach (offline without keys)
 - `bun dev/build-arena.ts` -> rebuild standalone dev/arena.html
 - SpacetimeDB: `spacetime start`, `./sync-engine.sh`, `spacetime publish --server local --module-path spacetimedb claude-tyson`,
-  `spacetime generate --lang typescript --out-dir client/module_bindings --module-path spacetimedb`
+  `spacetime generate --lang typescript --out-dir src/game/module_bindings --module-path spacetimedb`
 - Windows: run sync-engine.sh from Git Bash, or copy engine/engine.ts to spacetimedb/src/engine.ts manually.
 
 ## Not done yet
-- Next.js app scaffold + three.js scene (Anth), hooking renderer to fight rows.
-- fightClient.ts hasn't been typechecked against generated bindings (needs the spacetime CLI).
+- `src/game/fightClient.ts` hasn't been typechecked against generated bindings (needs the spacetime CLI).
 - Claude strategist (OpponentTuning patches via a reducer) is stubbed: applyTuningPatch exists in the engine.

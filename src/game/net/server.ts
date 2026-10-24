@@ -5,8 +5,8 @@ import { poseOf, type MotionEvent, type Observation } from '../cv/contract';
 // Thin wrapper over the generated SpacetimeDB bindings: connection, subscriptions,
 // a derived view of "my current match", and throttled CV forwarding.
 
-const URI = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
-const DB_NAME = import.meta.env.VITE_STDB_DB ?? 'claude-tyson';
+const URI = process.env.NEXT_PUBLIC_STDB_HOST ?? 'ws://localhost:3000';
+const DB_NAME = process.env.NEXT_PUBLIC_STDB_DB ?? 'claude-tyson';
 const POSE_SEND_INTERVAL_MS = 50; // 20 Hz keeps well inside the server's 250 ms freshness budget
 
 type Conn = DbConnection;
@@ -214,6 +214,11 @@ export class GameServer {
         .submitMotionEvent({ matchId, cvSessionId: ev.sessionId, eventId: ev.eventId, eventType: ev.type, punchType: ev.punchType ?? '' })
         .catch(this.report);
     }
+  }
+
+  close() {
+    this.conn?.disconnect();
+    this.conn = undefined;
   }
 
   private report = (err: unknown) => {

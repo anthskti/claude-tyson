@@ -52,10 +52,17 @@ export class Hud {
         left <b>J</b> jab · <b>U</b> hook · <b>M</b> upper &nbsp;|&nbsp; right <b>K</b> straight · <b>I</b> hook · <b>,</b> upper
         &nbsp;|&nbsp; <b>T</b> lose tracking · <b>C</b> recalibrate
       </div>`;
-    this.root.addEventListener('click', e => {
-      const action = (e.target as HTMLElement).dataset.action as keyof HudActions | undefined;
-      if (action) this.actions[action]();
-    });
+    this.root.addEventListener('click', this.onClick);
+  }
+
+  private onClick = (e: MouseEvent) => {
+    const action = (e.target as HTMLElement).dataset.action as keyof HudActions | undefined;
+    if (action) this.actions[action]();
+  };
+
+  dispose() {
+    this.root.removeEventListener('click', this.onClick);
+    this.root.replaceChildren();
   }
 
   render(s: HudState) {

@@ -39,8 +39,8 @@ keyboard ───────> input/keyboard.ts┼─ act ────> │ fi
 | `input/cvKit.ts` | Hani's CV kit `cv_sample` messages -> engine inputs (per INTEGRATION_CONTRACT) | 5 tests |
 | `input/motion.ts`, `input/keyboard.ts` | Browser MediaPipe classifier (alternative to the kit), keyboard | ✓ |
 | `spacetimedb/src/` | Tables + reducers: `startFight`, `act`, `tick`, `forfeit`, `postCoachCue`, `postCoachEffect` | vitest, real reducers |
-| `client/fightClient.ts` | Real game client: SpacetimeDB + LiveCoach + spectators | needs generated bindings |
-| `next/app/api/*/route.ts` | Drop-in Next.js routes for `/api/coach` and `/api/tts` | |
+| `src/game/` | Fight scene, HUD, and SpacetimeDB client. `src/app/page.tsx` mounts it. | |
+| `app/api/*/route.ts` | Next.js routes for `/api/coach` and `/api/tts` | |
 | `dev/arena.html`, `dev/server.ts` | Play the engine + coach in a browser | headless browser runs |
 
 ## Run it
@@ -57,8 +57,8 @@ ANTHROPIC_API_KEY=... CARTESIA_API_KEY=... CARTESIA_COACH_VOICE=<voice id> bun d
 spacetime start
 ./sync-engine.sh
 spacetime publish --server local --module-path spacetimedb claude-tyson
-spacetime generate --lang typescript --out-dir client/module_bindings --module-path spacetimedb
-# Next.js: copy next/app/api/* routes, use connectFight() from client/fightClient.ts
+spacetime generate --lang typescript --out-dir src/game/module_bindings --module-path spacetimedb
+bun run dev   # Next.js on http://localhost:3001 (port 3000 is SpacetimeDB)
 ```
 
 Env: `ANTHROPIC_API_KEY`, `COACH_MODEL` (default `claude-haiku-5-5`, the fast tier, because

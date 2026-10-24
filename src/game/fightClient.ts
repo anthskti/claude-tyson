@@ -3,14 +3,14 @@
 // Spectators call connectFight({ spectateFightId }) and get the same fight + coach captions.
 //
 // Generate bindings first (from repo root):
-//   spacetime generate --lang typescript --out-dir client/module_bindings --module-path spacetimedb
+//   spacetime generate --lang typescript --out-dir src/game/module_bindings --module-path spacetimedb
 import { DbConnection } from "./module_bindings";
-import type { Input } from "../engine/engine";
-import type { AdaptationResult, Capability, CoachRequest, CoachResponse, FightSnapshot, VoiceCue } from "../shared/contracts";
-import { toFightSnapshot, toContractEvent, type RawEvent, type ContractEvent } from "../coach/adapter";
-import { LiveCoach, type CueInfo, type CoachStatus } from "../coach/liveCoach";
-import { createCoachAudio } from "../coach/browserAudio";
-import { RULE_LINES } from "../coach/rules";
+import type { Input } from "../../engine/engine";
+import type { AdaptationResult, Capability, CoachRequest, CoachResponse, FightSnapshot, VoiceCue } from "../../shared/contracts";
+import { toFightSnapshot, toContractEvent, type RawEvent, type ContractEvent } from "../../coach/adapter";
+import { LiveCoach, type CueInfo, type CoachStatus } from "../../coach/liveCoach";
+import { createCoachAudio } from "../../coach/browserAudio";
+import { RULE_LINES } from "../../coach/rules";
 
 const HOST = process.env.NEXT_PUBLIC_STDB_HOST ?? "ws://localhost:3000";
 const DB_NAME = process.env.NEXT_PUBLIC_STDB_DB ?? "claude-tyson";

@@ -11,7 +11,7 @@ export type Hand = 'left' | 'right';
 export type AnyPunch = PunchType | 'unclassified';
 const HANDS = ['left', 'right'] as const;
 
-const BOT_URL = '/models/claude_bot.glb';
+const BOT_URL = '/claude_bot.glb';
 // Across the ring from the camera at z = 0.55, facing +Z (toward the camera).
 const BOT_POSITION = new THREE.Vector3(0, 0, -2.6);
 
@@ -70,24 +70,7 @@ export class Boxer {
       });
       this.anim = new BoxingAnimationController(gltf.scene, gltf.animations);
       this.anim.playIdle();
-      this.anim.update(0.016);
       this.root.add(gltf.scene);
-      this.root.updateMatrixWorld(true);
-      const marks: Record<string, string> = {};
-      const spot = (name: string) => {
-        const o = gltf.scene.getObjectByName(name);
-        if (!o) {
-          marks[name] = 'missing';
-          return;
-        }
-        const p = new THREE.Vector3();
-        o.getWorldPosition(p);
-        marks[name] = `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}`;
-      };
-      spot('head');
-      spot('DEF-foot.L');
-      spot('DEF-foot.R');
-      (window as unknown as { __bot?: unknown }).__bot = marks;
       if (this.down) this.anim.playKo();
     }).catch(err => {
       console.error('claude_bot.glb failed to load', err);
