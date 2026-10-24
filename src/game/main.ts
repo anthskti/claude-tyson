@@ -4,6 +4,8 @@ import { buildArena, loadRing } from './scene/ring';
 import { Boxer, PlayerGloves, cornerOf, type AnyPunch } from './scene/boxer';
 import { SimulatedCvProvider } from './cv/simulatedProvider';
 import { CvBridge } from './cv/bridge';
+import { BrowserCv } from './cv/browserCv';
+import type { CvHooks, CvInput } from './cv/input';
 import { CameraFeed } from './cv/cameraFeed';
 import { GuardCalibration, GuardClassifier, type GuardCalibrationData } from './cv/guard';
 import { poseOf, type Body, type CvProvider, type Guard, type Observation, type PoseState } from './cv/contract';
@@ -122,7 +124,10 @@ const hud = new Hud({
   forfeit: () => view && server.forfeit(view.match.id),
   useKeyboard: () => setInput('keyboard'),
   useCamera: () => setInput('camera'),
-  reconnectCamera: () => bridge.reconnect(),
+  reconnectCamera: () => {
+    void feed.show();
+    cameraInput.reconnect();
+  },
   cancelCalibration: () => endCalibration(false),
   skipCalibration: () => guardClassifier && endCalibration(true),
 });
@@ -141,10 +146,10 @@ function refresh() {
 
 // ─── CV input ──────────────────────────────────────────────────────────────
 
-// The keyboard and the webcam share one provider: the Python CV bridge presses the same
-// control keys the keyboard does. In camera mode the keyboard's punch/slip/guard keys are
-// ignored so everything comes from CV; blocks are classified from the bridge's wrist and
-// head markers against a per-player calibration (cv/guard.ts). C still recalibrates.
+// The keyboard and the webcam share one provider: camera input presses the same control
+// keys the keyboard does. In camera mode the keyboard's punch/slip/guard keys are ignored
+// so everything comes from CV; blocks are classified from the wrist and head markers
+// against a per-player calibration (cv/guard.ts). C still recalibrates.
 const sim = new SimulatedCvProvider();
 const cv: CvProvider = sim;
 const CV_DRIVEN_KEYS = ['j', 'u', 'k', 'i', 'a', 'd', 'q', 'e', 'w'];
@@ -182,7 +187,9 @@ function setCvGuards(next: Record<'left' | 'right', Guard>) {
 }
 
 function renderCalibration() {
-  hud.renderCalibration(calibration?.view(), { canSkip: !!guardClassifier, camera: hudState.camera });
+  hud.renderCalibration(calibration?.view(), {
+    canSkip: !!guardClassifier, camera: hudState.camera, source: hudState.cameraSource, detail: hudState.cameraDetail,
+  });
 }
 
 /** In camera mode, calibrate stance and block before the match or queue starts. */
@@ -190,7 +197,7 @@ function beforeFight(action: () => void) {
   if (hudState.input !== 'camera') return action();
   afterCalibration = action;
   calibration = new GuardCalibration({
-    onStance: () => bridge.resetCalibration(),
+    onStance: () => cameraInput.resetCalibration(),
     onDone(data) {
       try {
         localStorage.setItem(CALIBRATION_KEY, JSON.stringify(data));
@@ -212,12 +219,16 @@ function endCalibration(run: boolean) {
   renderCalibration();
   if (run) action?.();
 }
-// `?cvBridge=ws://127.0.0.1:8799` points this tab at a different bridge (e.g. a synthetic one).
-const bridgeUrl = new URLSearchParams(location.search).get('cvBridge') ?? undefined;
-const bridge = new CvBridge(sim, {
+// Camera classification runs in the browser by default (cv/browserCv.ts). The Python CV
+// bridge is the dev and tuning source: NEXT_PUBLIC_CV_SOURCE=bridge, `?cvSource=bridge`, or
+// `?cvBridge=ws://127.0.0.1:8799` (a different bridge, e.g. a synthetic one) picks it.
+const params = new URLSearchParams(location.search);
+const bridgeUrl = params.get('cvBridge') ?? undefined;
+const sourceKind = params.get('cvSource') ?? (bridgeUrl ? 'bridge' : process.env.NEXT_PUBLIC_CV_SOURCE ?? 'browser');
+const cameraHooks: CvHooks = {
   onStatus(status, detail) {
-    if (status === 'connected') hud.toast('camera CV connected', 'good');
-    else if (status === 'disconnected' && hudState.camera === 'connected') hud.toast(detail ?? 'camera CV disconnected', 'bad');
+    if (status === 'connected' && hudState.camera !== 'connected') hud.toast('camera tracking on', 'good');
+    else if (status === 'disconnected' && hudState.camera === 'connected') hud.toast(detail ?? 'camera tracking lost', 'bad');
     hudState.camera = status;
     hudState.cameraDetail = detail;
     if (status !== 'connected') setCvGuards({ left: 'neutral', right: 'neutral' });
@@ -238,7 +249,13 @@ const bridge = new CvBridge(sim, {
     hudState.lastCv = `${event} → ${key ? KEY_LABEL[key] : 'release'}`;
     refresh();
   },
-}, bridgeUrl);
+  onStats(stats) {
+    hudState.cameraStats = stats;
+    refresh();
+  },
+};
+const cameraInput: CvInput = sourceKind === 'bridge' ? new CvBridge(sim, cameraHooks, bridgeUrl) : new BrowserCv(sim, cameraHooks, feed);
+hudState.cameraSource = cameraInput.kind;
 
 function setInput(mode: InputMode) {
   hudState.input = mode;
@@ -252,13 +269,13 @@ function setInput(mode: InputMode) {
     if (mode === 'camera') sim.blockedKeys.add(k);
     else sim.blockedKeys.delete(k);
   }
-  bridge.stop();
+  cameraInput.stop();
   setCvGuards({ left: 'neutral', right: 'neutral' });
   hudState.camera = 'off';
   hudState.lastCv = undefined;
   if (mode === 'camera') {
-    bridge.start();
     void feed.show();
+    cameraInput.start();
   } else {
     feed.hide();
     endCalibration(false);
@@ -334,7 +351,7 @@ return () => {
   alive = false;
   renderer.setAnimationLoop(null);
   window.removeEventListener('resize', resize);
-  bridge.stop();
+  cameraInput.stop();
   feed.hide();
   cv.stop();
   server.close();

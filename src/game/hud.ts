@@ -1,5 +1,5 @@
 import type { PoseState, TrackingState } from './cv/contract';
-import type { BridgeStatus } from './cv/bridge';
+import type { CvSourceKind, CvStats, CvStatus } from './cv/input';
 import type { CalibrationView } from './cv/guard';
 import { RULES_HTML } from './combatText';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
@@ -32,8 +32,10 @@ export interface HudState {
   queued: boolean;
   pose?: PoseState;
   input: InputMode;
-  camera: BridgeStatus;
+  camera: CvStatus;
   cameraDetail?: string;
+  cameraSource?: CvSourceKind;
+  cameraStats?: CvStats;
   /** Last CV event and the key it mapped to, e.g. "punch_left hook → U". */
   lastCv?: string;
 }
@@ -121,10 +123,15 @@ export class Hud {
     const toggle = `<button class="chip" data-action="${other}" title="Switch input">input: ${s.input} ⇄</button>`;
     if (s.input === 'keyboard') return toggle;
     const ok = s.camera === 'connected';
-    const detail = !ok && s.cameraDetail ? ` (${escapeHtml(s.cameraDetail)})` : '';
+    const detail = s.cameraDetail ? ` (${escapeHtml(s.cameraDetail)})` : '';
+    const bridge = s.cameraSource === 'bridge';
+    const stats = s.cameraStats && !bridge ? ` · ${s.cameraStats.fps.toFixed(0)} fps` : '';
+    const label = { off: 'off', connecting: 'starting', connected: 'tracking', disconnected: 'unavailable' }[s.camera];
     const camera = ok
-      ? `<span class="chip online">camera: connected</span>`
-      : `<button class="chip warn" data-action="reconnectCamera" title="Start the bridge in cv-mvp/: python -m cv_mvp --camera 0">camera: ${s.camera}${detail} · retry</button>`;
+      ? `<span class="chip online" title="${s.cameraStats ? `${s.cameraStats.inferenceP95Ms.toFixed(1)} ms/frame p95 · pose ${s.cameraStats.poseMs?.toFixed(1)} · hands ${s.cameraStats.handsMs?.toFixed(1)} ms median` : ''}">camera: ${label}${detail}${stats}</span>`
+      : s.camera === 'connecting'
+        ? `<span class="chip warn">camera: ${label}${detail}</span>`
+        : `<button class="chip warn" data-action="reconnectCamera" title="${bridge ? 'Start the bridge in cv-mvp/: python -m cv_mvp --camera 0' : 'Allow camera access, then retry'}">camera: ${label}${detail} · retry</button>`;
     const last = `<span class="chip synthetic">last cv: ${s.lastCv ? escapeHtml(s.lastCv) : '—'}</span>`;
     return toggle + camera + last;
   }
@@ -133,7 +140,7 @@ export class Hud {
     const opt = (mode: InputMode, action: keyof HudActions, label: string) =>
       `<button data-action="${action}" class="${s.input === mode ? '' : 'secondary'}">${label}</button>`;
     return `<div class="input-picker"><span class="dim">Input</span>
-      ${opt('keyboard', 'useKeyboard', 'Keyboard')}${opt('camera', 'useCamera', 'Camera (CV bridge)')}</div>`;
+      ${opt('keyboard', 'useKeyboard', 'Keyboard')}${opt('camera', 'useCamera', s.cameraSource === 'bridge' ? 'Camera (CV bridge)' : 'Camera')}</div>`;
   }
 
   private menuHtml(s: HudState): string {
@@ -188,7 +195,7 @@ export class Hud {
   }
 
   /** Pre-match camera calibration overlay; pass undefined to hide it. */
-  renderCalibration(v: CalibrationView | undefined, opts: { canSkip: boolean; camera: BridgeStatus }) {
+  renderCalibration(v: CalibrationView | undefined, opts: { canSkip: boolean; camera: CvStatus; source?: CvSourceKind; detail?: string }) {
     const box = el('calibration');
     box.style.display = v ? 'flex' : 'none';
     if (!v) {
@@ -198,12 +205,16 @@ export class Hud {
     const steps: CalibrationView['step'][] = ['frame', 'stance', 'block'];
     const idx = steps.indexOf(v.step);
     const tick = (on: boolean, label: string) => `<span class="${on ? 'ok' : 'miss'}">${on ? '✓' : '·'} ${label}</span>`;
-    const waiting = opts.camera !== 'connected'
-      ? `<p class="warn">Waiting for the camera bridge. Start it in <code>cv-mvp/</code>: <code>python -m cv_mvp --camera 0</code></p>`
-      : '';
+    const detail = opts.detail ? ` (${escapeHtml(opts.detail)})` : '';
+    const waiting = opts.camera === 'connected' ? ''
+      : opts.source === 'bridge'
+        ? `<p class="warn">Waiting for the camera bridge. Start it in <code>cv-mvp/</code>: <code>python -m cv_mvp --camera 0</code></p>`
+        : opts.camera === 'disconnected'
+          ? `<p class="warn">Camera tracking unavailable${detail}. Allow camera access and retry.</p>`
+          : `<p class="warn">Starting camera tracking${detail}. The first load downloads about 20 MB.</p>`;
     // Rebuild only when the text changes; observations arrive at ~30 Hz and replacing the
     // buttons that often would swallow clicks.
-    const key = [v.step, v.error, opts.canSkip, opts.camera, v.seen.head, v.seen.left, v.seen.right].join('|');
+    const key = [v.step, v.error, opts.canSkip, opts.camera, opts.detail, v.seen.head, v.seen.left, v.seen.right].join('|');
     if (key === this.calibrationKey) {
       const bar = box.querySelector<HTMLElement>('.progress div');
       if (bar) bar.style.width = `${(v.progress * 100).toFixed(0)}%`;
