@@ -129,7 +129,36 @@ def edges():
     return out
 
 
+def thresholds():
+    """Each 6 s loop is slower, with a smaller dodge, a narrower hook sweep and a lower
+    hook elbow than the last, so each threshold is crossed part way through."""
+    rng = random.Random(5)
+    out, t = [], 0
+    for k in range(24):
+        stretch, amp = 1 + 0.06 * k, 0.45 + 0.02 * k
+        sweep, raise_ = 1 - 0.04 * k, 1 - 0.025 * k
+        local = 0
+        while local < 6000 * stretch:
+            r = frame(int(local / stretch))
+            r["timestamp_ms"] = t
+            head = r["pose"][0]
+            head["x"] = 0.5 + (head["x"] - 0.5) * amp
+            if 4.8 <= (local / stretch % 6000) / 1000 < 5.7:
+                # Narrow the hook's sweep and lower its elbow toward the guard position.
+                for pt in r["hands"][0]["landmarks"]:
+                    pt["x"] = 0.75 + (pt["x"] - 0.75) * sweep
+                elbow = r["pose"][13]
+                elbow["x"] = 0.66 + (elbow["x"] - 0.66) * raise_
+                elbow["y"] = 0.75 + (elbow["y"] - 0.75) * raise_
+            out.append(r)
+            step = 33 + rng.randint(-3, 3)
+            local += step
+            t += step
+    return out
+
+
 SCENARIOS = {
+    "thresholds": (thresholds, GAME),
     "clean": (clean, GAME),
     "noisy": (noisy, GAME),
     "dropouts": (dropouts, GAME),
@@ -175,9 +204,10 @@ def export(name, records, config_path, out):
 
 
 def write(path, rows):
-    with gzip.open(path, "wt") as f:
+    # mtime=0 keeps re-exports byte-identical when nothing changed.
+    with open(path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as f:
         for row in rows:
-            f.write(json.dumps(row, separators=(",", ":")) + "\n")
+            f.write((json.dumps(row, separators=(",", ":")) + "\n").encode())
 
 
 def clip_records(path):
