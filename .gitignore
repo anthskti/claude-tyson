@@ -7,3 +7,4 @@ bun.lockb
 .env
 .env.local
 .next/
+.claude/settings.local.json
