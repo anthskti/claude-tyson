@@ -1,4 +1,6 @@
 import type { PoseState, TrackingState } from './cv/contract';
+import type { BridgeStatus } from './cv/bridge';
+import type { CalibrationView } from './cv/guard';
 import { RULES_HTML } from './combatText';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
 
@@ -10,7 +12,14 @@ export interface HudActions {
   findPvp(): void;
   cancelPvp(): void;
   forfeit(): void;
+  useKeyboard(): void;
+  useCamera(): void;
+  reconnectCamera(): void;
+  cancelCalibration(): void;
+  skipCalibration(): void;
 }
+
+export type InputMode = 'keyboard' | 'camera';
 
 export interface HudState {
   server: 'connecting' | 'online' | 'offline';
@@ -22,6 +31,11 @@ export interface HudState {
   profile?: ProfileRow;
   queued: boolean;
   pose?: PoseState;
+  input: InputMode;
+  camera: BridgeStatus;
+  cameraDetail?: string;
+  /** Last CV event and the key it mapped to, e.g. "punch_left hook → U". */
+  lastCv?: string;
 }
 
 const el = (id: string) => document.getElementById(id)!;
@@ -43,6 +57,7 @@ export class Hud {
       <div id="menu" class="menu"></div>
       <div id="adapt" class="adapt"></div>
       <div id="pause" class="pause"></div>
+      <div id="calibration" class="calibration"></div>
       <div id="toasts" class="toasts"></div>
       <div id="vignette" class="vignette"></div>
       <div id="pose" class="pose"></div>
@@ -71,7 +86,7 @@ export class Hud {
     el('status').innerHTML = `
       <span class="chip ${s.server}">server: ${s.server}</span>
       <span class="chip ${s.tracking === 'good' ? 'online' : 'warn'}">cv: ${s.tracking}</span>
-      <span class="chip synthetic">simulated input</span>`;
+      ${this.inputChips(s)}`;
 
     el('opp-name').textContent = s.view?.match.mode === 'bot' ? `BOT` : 'OPPONENT';
 
@@ -101,6 +116,26 @@ export class Hud {
     }
   }
 
+  private inputChips(s: HudState): string {
+    const other = s.input === 'camera' ? 'useKeyboard' : 'useCamera';
+    const toggle = `<button class="chip" data-action="${other}" title="Switch input">input: ${s.input} ⇄</button>`;
+    if (s.input === 'keyboard') return toggle;
+    const ok = s.camera === 'connected';
+    const detail = !ok && s.cameraDetail ? ` (${escapeHtml(s.cameraDetail)})` : '';
+    const camera = ok
+      ? `<span class="chip online">camera: connected</span>`
+      : `<button class="chip warn" data-action="reconnectCamera" title="Start the bridge in cv-mvp/: python -m cv_mvp --camera 0">camera: ${s.camera}${detail} · retry</button>`;
+    const last = `<span class="chip synthetic">last cv: ${s.lastCv ? escapeHtml(s.lastCv) : '—'}</span>`;
+    return toggle + camera + last;
+  }
+
+  private inputPicker(s: HudState): string {
+    const opt = (mode: InputMode, action: keyof HudActions, label: string) =>
+      `<button data-action="${action}" class="${s.input === mode ? '' : 'secondary'}">${label}</button>`;
+    return `<div class="input-picker"><span class="dim">Input</span>
+      ${opt('keyboard', 'useKeyboard', 'Keyboard')}${opt('camera', 'useCamera', 'Camera (CV bridge)')}</div>`;
+  }
+
   private menuHtml(s: HudState): string {
     const offline = s.server !== 'online';
     let resultHtml = '';
@@ -121,6 +156,7 @@ export class Hud {
     return `
       <h1>CLAUDE TYSON</h1>
       ${resultHtml}
+      ${this.inputPicker(s)}
       <div class="buttons">
         <button data-action="fightBot" ${offline ? 'disabled' : ''}>Fight adaptive bot</button>
         ${s.queued
@@ -151,6 +187,44 @@ export class Hud {
     el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}</span>`;
   }
 
+  /** Pre-match camera calibration overlay; pass undefined to hide it. */
+  renderCalibration(v: CalibrationView | undefined, opts: { canSkip: boolean; camera: BridgeStatus }) {
+    const box = el('calibration');
+    box.style.display = v ? 'flex' : 'none';
+    if (!v) {
+      this.calibrationKey = '';
+      return;
+    }
+    const steps: CalibrationView['step'][] = ['frame', 'stance', 'block'];
+    const idx = steps.indexOf(v.step);
+    const tick = (on: boolean, label: string) => `<span class="${on ? 'ok' : 'miss'}">${on ? '✓' : '·'} ${label}</span>`;
+    const waiting = opts.camera !== 'connected'
+      ? `<p class="warn">Waiting for the camera bridge. Start it in <code>cv-mvp/</code>: <code>python -m cv_mvp --camera 0</code></p>`
+      : '';
+    // Rebuild only when the text changes; observations arrive at ~30 Hz and replacing the
+    // buttons that often would swallow clicks.
+    const key = [v.step, v.error, opts.canSkip, opts.camera, v.seen.head, v.seen.left, v.seen.right].join('|');
+    if (key === this.calibrationKey) {
+      const bar = box.querySelector<HTMLElement>('.progress div');
+      if (bar) bar.style.width = `${(v.progress * 100).toFixed(0)}%`;
+      return;
+    }
+    this.calibrationKey = key;
+    box.innerHTML = `<div class="panel">
+      <div class="dim">Camera calibration · step ${Math.max(1, idx + 1)} of 3</div>
+      <h2>${v.title}</h2>
+      <p>${v.hint}</p>
+      <div class="progress"><div style="width:${(v.progress * 100).toFixed(0)}%"></div></div>
+      <div class="seen">${tick(v.seen.head, 'head')}${tick(v.seen.left, 'left hand')}${tick(v.seen.right, 'right hand')}</div>
+      ${v.error ? `<p class="warn">${escapeHtml(v.error)}</p>` : ''}
+      ${waiting}
+      <div class="buttons">
+        ${opts.canSkip ? `<button data-action="skipCalibration" class="secondary">Use last calibration</button>` : ''}
+        <button data-action="cancelCalibration" class="secondary">Cancel</button>
+      </div>
+    </div>`;
+  }
+
   /** Name the incoming punch and the answers to it, until it lands. */
   telegraph(name: string, answer: string, msUntilImpact: number) {
     const t = el('telegraph');
@@ -165,6 +239,7 @@ export class Hud {
   }
 
   private telegraphTimer = 0;
+  private calibrationKey = '';
 
   toast(text: string, kind: 'good' | 'bad' | 'info' = 'info') {
     const t = document.createElement('div');

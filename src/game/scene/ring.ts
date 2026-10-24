@@ -99,6 +99,9 @@ export function buildArena(scene: THREE.Scene) {
   key.target.position.set(0, 0, 0);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
+  // Without bias the canvas self-shadows into acne (the "noisy floor").
+  key.shadow.bias = -0.0005;
+  key.shadow.normalBias = 0.02;
   scene.add(key, key.target);
 
   for (const [x, z, color] of [[-6, -6, 0xff5a5a], [6, 6, 0x5a8cff]] as const) {
@@ -139,9 +142,17 @@ export async function loadRing(url = '/boxing_ring.glb'): Promise<THREE.Object3D
   try {
     const gltf = await new GLTFLoader().loadAsync(url);
     gltf.scene.traverse(o => {
-      if ((o as THREE.Mesh).isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.receiveShadow = true;
+      // The canvas/apron plane only receives; letting it cast too makes it shadow itself.
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mesh.castShadow = !mats.some(m => m?.name === 'Arena.Floor');
+      for (const m of mats as THREE.MeshStandardMaterial[]) {
+        // Blender exports everything double-sided; render shadows from back faces only.
+        m.shadowSide = THREE.BackSide;
+        // The canvas texture is seen at grazing angles; three clamps this to the GPU max.
+        if (m.map) m.map.anisotropy = 8;
       }
     });
     const top = canvasTopY(gltf.scene);

@@ -44,6 +44,8 @@ export class SimulatedCvProvider implements CvProvider {
   private lateral = 0;
   private dodgeSide: 'left' | 'right' | null = null;
   private held = new Set<string>();
+  /** Physical keys ignored by the keyboard listener (e.g. punches/slips while the camera drives them). */
+  blockedKeys = new Set<string>();
   private punchUntil = { left: 0, right: 0 };
   private pending: MotionEvent[] = [];
   private eventSeq = 0;
@@ -73,18 +75,27 @@ export class SimulatedCvProvider implements CvProvider {
     clearInterval(this.timer);
   }
 
-  private onKeyDown = (e: KeyboardEvent) => {
-    const k = e.key.toLowerCase();
-    if (e.repeat) return;
+  /** Press a control key. The keyboard and the CV bridge (cv/bridge.ts) both drive input through here. */
+  press(key: string) {
+    const k = key.toLowerCase();
     this.held.add(k);
     const punch = SIM_KEYS[k];
     if (punch) this.punch(punch.hand, punch.type);
     if (k === 't') this.trackingLost = !this.trackingLost;
     if (k === 'c') this.recalibrate();
+  }
+
+  release(key: string) {
+    this.held.delete(key.toLowerCase());
+  }
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (e.repeat || this.blockedKeys.has(e.key.toLowerCase())) return;
+    this.press(e.key);
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
-    this.held.delete(e.key.toLowerCase());
+    if (!this.blockedKeys.has(e.key.toLowerCase())) this.release(e.key);
   };
 
   // Keys released while the window is unfocused never fire keyup.
@@ -106,7 +117,8 @@ export class SimulatedCvProvider implements CvProvider {
   private body(): Body {
     const left = this.held.has('a');
     const right = this.held.has('d');
-    if (left === right) return 'neutral';
+    // No leaning while a punch is out (the server rejects it too).
+    if (left === right || this.punchUntil.left || this.punchUntil.right) return 'neutral';
     return left ? 'lean_left' : 'lean_right';
   }
 
@@ -148,6 +160,7 @@ export class SimulatedCvProvider implements CvProvider {
     const now = performance.now();
     // Detector owns rearming: no new punch until the previous one returned to guard.
     if (this.trackingState(now) !== 'good' || this.punchUntil[hand]) return;
+    if (this.dodgeSide || this.body() !== 'neutral') return; // no swinging mid-lean
     this.punchUntil[hand] = now + PUNCH_EXTEND_MS[type];
     this.emit(hand === 'left' ? 'punch_left' : 'punch_right', now, type);
   }

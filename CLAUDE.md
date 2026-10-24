@@ -24,6 +24,6 @@ Repo: github.com/anthskti/claude-tyson. Do not push without asking Abdullah.
 
 ## Current notes
 
-- The live game currently uses `SimulatedCvProvider`; connect the real CV provider through the same local input boundary before a webcam demo.
+- The live game uses `SimulatedCvProvider` for keyboard input. `src/game/cv/bridge.ts` connects to the Python CV bridge (`cv-mvp`, ws://127.0.0.1:8765) and presses the same control keys, so the webcam and keyboard share one input path. Blocks are classified client-side from the bridge's head/wrist markers against a pre-match calibration (`src/game/cv/guard.ts`).
 - The standalone arena uses its own local engine and is for input/animation experiments.
 - `.env.example` contains the local SpacetimeDB host and database settings.

@@ -32,14 +32,16 @@ export interface ServerEvents {
 }
 
 export function tokenKey(): string {
-  // ?player=2 gives a second identity in the same browser, for testing PvP in two tabs.
+  // ?player=2 keeps a separate identity slot; mostly useful with a duplicated tab.
   const slot = new URLSearchParams(location.search).get('player') ?? '1';
   return `claude-tyson.token.${slot}`;
 }
 
+// Per-tab storage: each tab is its own player, so two local tabs can PvP each other.
+// The identity survives reloads of that tab but not closing it.
 function readToken(): string | undefined {
   try {
-    return localStorage.getItem(tokenKey()) ?? undefined;
+    return sessionStorage.getItem(tokenKey()) ?? undefined;
   } catch {
     return undefined;
   }
@@ -47,7 +49,7 @@ function readToken(): string | undefined {
 
 function writeToken(token: string) {
   try {
-    localStorage.setItem(tokenKey(), token);
+    sessionStorage.setItem(tokenKey(), token);
   } catch {
     /* identity just won't persist across reloads */
   }

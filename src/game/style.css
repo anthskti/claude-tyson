@@ -33,6 +33,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07080c; }
 .chip.online { border-color: var(--good); color: var(--good); }
 .chip.offline, .chip.warn { border-color: var(--warn); color: var(--warn); }
 .chip.synthetic { color: var(--dim); }
+button.chip { font: inherit; font-size: 11px; color: inherit; cursor: pointer; }
+button.chip:hover { border-color: rgba(255,255,255,0.5); }
+.menu .input-picker { display: flex; gap: 8px; align-items: center; }
+.menu .input-picker button { padding: 8px 14px; }
 
 .menu {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -84,3 +88,30 @@ code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; 
 .rules th, .rules td { padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.12); }
 .rules th { color: var(--dim); font-weight: 600; }
 .keys { line-height: 1.8; }
+
+.camera-feed {
+  position: absolute; top: 92px; right: 16px; width: 240px; height: 180px; border-radius: 8px; overflow: hidden;
+  background: #000; border: 2px solid var(--warn);
+}
+.camera-feed[data-framed='all'] { border-color: var(--good); }
+.camera-feed[data-framed='none'] { border-color: var(--red); }
+.camera-feed video, .camera-feed canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.camera-feed video { transform: scaleX(-1); }
+
+.calibration {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(7,8,12,0.85); pointer-events: auto; padding: 16px;
+}
+.calibration .panel { max-width: 420px; text-align: center; background: rgba(10,12,18,0.97); padding: 20px 24px; border-radius: 10px; }
+.calibration h2 { margin: 6px 0; font-size: 28px; }
+.calibration .progress { height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; overflow: hidden; margin: 12px 0; }
+.calibration .progress div { height: 100%; background: var(--good); transition: width 0.1s linear; }
+.calibration .seen { display: flex; gap: 14px; justify-content: center; font-size: 13px; }
+.calibration .seen .ok { color: var(--good); }
+.calibration .seen .miss { color: var(--dim); }
+.calibration .warn { color: var(--warn); font-size: 13px; }
+.calibration .buttons { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.calibration button {
+  font: inherit; font-weight: 700; padding: 8px 16px; border-radius: 6px; border: 0; cursor: pointer;
+  background: rgba(255,255,255,0.12); color: var(--fg);
+}

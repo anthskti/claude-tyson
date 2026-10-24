@@ -562,11 +562,14 @@ function defenderState(ctx: Ctx, f: Fighter): DefenderState {
   };
 }
 
-function botDefense(ctx: Ctx, strat: Strategy | undefined): DefenderState {
+function botDefense(ctx: Ctx, bot: Fighter, strat: Strategy | undefined): DefenderState {
   if (ctx.random() >= (strat?.defenseRate ?? BOT_DEFAULTS.defenseRate)) {
     return { body: 'neutral', blocking: false };
   }
   const d = BOT_DEFENSES[ctx.random.integerInRange(0, BOT_DEFENSES.length - 1)];
+  // Same rule as the player: no slipping while its own punch is out.
+  const punching = !isPast(ctx, bot.leftReadyAt) || !isPast(ctx, bot.rightReadyAt);
+  if (punching && d.body !== 'neutral') return { body: 'neutral', blocking: false };
   return { body: d.body, blocking: d.blocking };
 }
 
@@ -738,7 +741,9 @@ export const updatePose = spacetimedb.reducer(
     let bodyState = args.dodgeValid ? asBody(args.bodyState) : 'neutral';
     let stamina = me.stamina;
     if (me.bodyState === 'neutral' && bodyState !== 'neutral') {
-      if (!isPast(ctx, me.dodgeReadyAt) || stamina < DODGE_COST) bodyState = 'neutral';
+      // No leaning while a punch is still out.
+      const punching = !isPast(ctx, me.leftReadyAt) || !isPast(ctx, me.rightReadyAt);
+      if (punching || !isPast(ctx, me.dodgeReadyAt) || stamina < DODGE_COST) bodyState = 'neutral';
       else stamina -= DODGE_COST;
     }
     const canBlock = bodyState === 'neutral' && stamina > 0;
@@ -809,6 +814,7 @@ export const submitMotionEvent = spacetimedb.reducer(
     if (eventType !== 'punch_left' && eventType !== 'punch_right') return;
     const hand: Hand = eventType === 'punch_left' ? 'left' : 'right';
     if (hand === 'left' ? !me.punchLeftValid : !me.punchRightValid) return;
+    if (asBody(me.bodyState) !== 'neutral') return; // no swinging mid-lean
     if (!isPast(ctx, hand === 'left' ? me.leftReadyAt : me.rightReadyAt)) return; // hand still busy
 
     const type = asPunchType(punchType) ?? (hand === 'left' ? 'left_straight' : 'right_straight');
@@ -842,7 +848,7 @@ export const resolveAttack = spacetimedb.reducer(
     }
 
     const strat = ctx.db.botStrategy.matchId.find(atk.matchId) ?? undefined;
-    const state = defender.identity ? defenderState(ctx, defender) : botDefense(ctx, strat);
+    const state = defender.identity ? defenderState(ctx, defender) : botDefense(ctx, defender, strat);
     const attackType = asPunchType(atk.punchType);
     if (!attackType) {
       ctx.db.attack.id.update({ ...atk, result: 'cancelled' });

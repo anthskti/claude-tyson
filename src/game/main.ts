@@ -1,12 +1,15 @@
 import './style.css';
 import * as THREE from 'three';
 import { buildArena, loadRing } from './scene/ring';
-import { Boxer, PlayerGloves, type AnyPunch } from './scene/boxer';
+import { Boxer, PlayerGloves, cornerOf, type AnyPunch } from './scene/boxer';
 import { SimulatedCvProvider } from './cv/simulatedProvider';
+import { CvBridge } from './cv/bridge';
+import { CameraFeed } from './cv/cameraFeed';
+import { GuardCalibration, GuardClassifier, type GuardCalibrationData } from './cv/guard';
 import { poseOf, type Body, type CvProvider, type Guard, type Observation, type PoseState } from './cv/contract';
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView } from './net/server';
-import { Hud, type HudState } from './hud';
+import { Hud, type HudState, type InputMode } from './hud';
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -52,7 +55,20 @@ resize();
 
 // ─── Game state ────────────────────────────────────────────────────────────
 
-const hudState: HudState = { server: 'connecting', tracking: 'calibrating', queued: false };
+// Per tab (sessionStorage), so two local clients can use different inputs.
+const INPUT_KEY = 'claude-tyson.input';
+function savedInput(): InputMode {
+  const param = new URLSearchParams(location.search).get('input');
+  if (param === 'camera' || param === 'keyboard') return param;
+  try {
+    return sessionStorage.getItem(INPUT_KEY) === 'camera' ? 'camera' : 'keyboard';
+  } catch {
+    return 'keyboard';
+  }
+}
+const hudState: HudState = {
+  server: 'connecting', tracking: 'calibrating', queued: false, input: savedInput(), camera: 'off',
+};
 let view: MatchView | undefined;
 let latest: Observation | undefined;
 let myPose: PoseState = { body: 'neutral', guards: { left: 'neutral', right: 'neutral' } };
@@ -100,10 +116,15 @@ const server = new GameServer({
 });
 
 const hud = new Hud({
-  fightBot: () => server.startBotMatch(),
-  findPvp: () => server.joinPvp(),
+  fightBot: () => beforeFight(() => server.startBotMatch()),
+  findPvp: () => beforeFight(() => server.joinPvp()),
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),
+  useKeyboard: () => setInput('keyboard'),
+  useCamera: () => setInput('camera'),
+  reconnectCamera: () => bridge.reconnect(),
+  cancelCalibration: () => endCalibration(false),
+  skipCalibration: () => guardClassifier && endCalibration(true),
 });
 
 function refresh() {
@@ -112,13 +133,138 @@ function refresh() {
   hudState.result = view ? server.result(view.match.id) : undefined;
   hudState.profile = server.profile();
   hudState.queued = server.inQueue();
+  // The Claude-themed bot is PvE only; a PvP opponent is a fighter in their corner colour.
+  opponent.setLook(view?.match.mode === 'pvp' ? cornerOf(view.opponent.slot) : 'claude');
+  gloves.setCorner(cornerOf(view?.me.slot ?? 0));
   hud.render(hudState);
 }
 
 // ─── CV input ──────────────────────────────────────────────────────────────
 
-// Swap this for Hani's provider (Python WebSocket bridge or browser worker) once ready.
-const cv: CvProvider = new SimulatedCvProvider();
+// The keyboard and the webcam share one provider: the Python CV bridge presses the same
+// control keys the keyboard does. In camera mode the keyboard's punch/slip/guard keys are
+// ignored so everything comes from CV; blocks are classified from the bridge's wrist and
+// head markers against a per-player calibration (cv/guard.ts). C still recalibrates.
+const sim = new SimulatedCvProvider();
+const cv: CvProvider = sim;
+const CV_DRIVEN_KEYS = ['j', 'u', 'k', 'i', 'a', 'd', 'q', 'e', 'w'];
+const KEY_LABEL: Record<string, string> = {
+  j: 'J', u: 'U', k: 'K', i: 'I', a: 'hold A', d: 'hold D', q: 'hold Q', e: 'hold E',
+};
+const GUARD_KEY = { left: 'q', right: 'e' } as const;
+const feed = new CameraFeed(document.getElementById('hud')!);
+
+// Saved per machine so the next match can skip calibration.
+const CALIBRATION_KEY = 'claude-tyson.guard-calibration';
+function loadCalibration(): GuardCalibrationData | undefined {
+  try {
+    const raw = localStorage.getItem(CALIBRATION_KEY);
+    return raw ? (JSON.parse(raw) as GuardCalibrationData) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+const savedCalibration = loadCalibration();
+let guardClassifier = savedCalibration && new GuardClassifier(savedCalibration);
+let cvGuards: Record<'left' | 'right', Guard> = { left: 'neutral', right: 'neutral' };
+let calibration: GuardCalibration | undefined;
+let afterCalibration: (() => void) | undefined;
+
+function setCvGuards(next: Record<'left' | 'right', Guard>) {
+  for (const hand of ['left', 'right'] as const) {
+    if (next[hand] === cvGuards[hand]) continue;
+    const key = GUARD_KEY[hand];
+    if (next[hand] === 'block') sim.press(key);
+    else sim.release(key);
+    hudState.lastCv = `${next[hand] === 'block' ? 'block' : 'unblock'}_${hand} → ${next[hand] === 'block' ? KEY_LABEL[key] : 'release'}`;
+  }
+  cvGuards = next;
+}
+
+function renderCalibration() {
+  hud.renderCalibration(calibration?.view(), { canSkip: !!guardClassifier, camera: hudState.camera });
+}
+
+/** In camera mode, calibrate stance and block before the match or queue starts. */
+function beforeFight(action: () => void) {
+  if (hudState.input !== 'camera') return action();
+  afterCalibration = action;
+  calibration = new GuardCalibration({
+    onStance: () => bridge.resetCalibration(),
+    onDone(data) {
+      try {
+        localStorage.setItem(CALIBRATION_KEY, JSON.stringify(data));
+      } catch {
+        // Storage blocked: calibration lasts for this page only.
+      }
+      guardClassifier = new GuardClassifier(data);
+      hud.toast('calibrated', 'good');
+      endCalibration(true);
+    },
+  });
+  renderCalibration();
+}
+
+function endCalibration(run: boolean) {
+  const action = afterCalibration;
+  calibration = undefined;
+  afterCalibration = undefined;
+  renderCalibration();
+  if (run) action?.();
+}
+// `?cvBridge=ws://127.0.0.1:8799` points this tab at a different bridge (e.g. a synthetic one).
+const bridgeUrl = new URLSearchParams(location.search).get('cvBridge') ?? undefined;
+const bridge = new CvBridge(sim, {
+  onStatus(status, detail) {
+    if (status === 'connected') hud.toast('camera CV connected', 'good');
+    else if (status === 'disconnected' && hudState.camera === 'connected') hud.toast(detail ?? 'camera CV disconnected', 'bad');
+    hudState.camera = status;
+    hudState.cameraDetail = detail;
+    if (status !== 'connected') setCvGuards({ left: 'neutral', right: 'neutral' });
+    renderCalibration();
+    refresh();
+  },
+  onObservation(obs) {
+    const now = performance.now();
+    if (calibration) {
+      calibration.feed(obs.markers, now);
+      renderCalibration();
+    } else if (guardClassifier) {
+      setCvGuards(guardClassifier.update(obs.markers, now));
+    }
+    feed.update(obs.markers, cvGuards);
+  },
+  onTranslate(event, key) {
+    hudState.lastCv = `${event} → ${key ? KEY_LABEL[key] : 'release'}`;
+    refresh();
+  },
+}, bridgeUrl);
+
+function setInput(mode: InputMode) {
+  hudState.input = mode;
+  try {
+    sessionStorage.setItem(INPUT_KEY, mode);
+  } catch {
+    // Storage blocked: the choice just won't survive a reload.
+  }
+  for (const k of CV_DRIVEN_KEYS) {
+    sim.release(k);
+    if (mode === 'camera') sim.blockedKeys.add(k);
+    else sim.blockedKeys.delete(k);
+  }
+  bridge.stop();
+  setCvGuards({ left: 'neutral', right: 'neutral' });
+  hudState.camera = 'off';
+  hudState.lastCv = undefined;
+  if (mode === 'camera') {
+    bridge.start();
+    void feed.show();
+  } else {
+    feed.hide();
+    endCalibration(false);
+  }
+  refresh();
+}
 cv.start((obs, events) => {
   const trackingChanged = obs.trackingState !== hudState.tracking;
   latest = obs;
@@ -143,6 +289,7 @@ cv.start((obs, events) => {
   if (trackingChanged) refresh();
 });
 
+setInput(hudState.input);
 server.connect();
 refresh();
 
@@ -187,6 +334,8 @@ return () => {
   alive = false;
   renderer.setAnimationLoop(null);
   window.removeEventListener('resize', resize);
+  bridge.stop();
+  feed.hide();
   cv.stop();
   server.close();
   hud.dispose();
