@@ -3,14 +3,18 @@ import * as THREE from 'three';
 import { buildArena, loadRing } from './scene/ring';
 import { Boxer, PlayerGloves, type AnyPunch } from './scene/boxer';
 import { SimulatedCvProvider } from './cv/simulatedProvider';
+import { RealCvProvider } from './cv/realProvider';
 import { poseOf, type Body, type CvProvider, type Guard, type Observation, type PoseState } from './cv/contract';
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView } from './net/server';
 import { Hud, type HudState } from './hud';
-import { LiveCoach } from '../../coach/liveCoach';
-import { createCoachAudio } from '../../coach/browserAudio';
-import { attackToRawEvent, matchToFightRow } from './coachBridge';
-import type { Capability } from '../../shared/contracts';
+import { DebugLog } from './debugLog';
+import { AdaptationManager } from './adaptationManager';
+import { MahoragasWheel } from './scene/mahoragasWheel';
+import { CornerScene } from './cornerScene';
+import { pickLine } from './dialogue';
+import { CalibrationScreen } from './calibration';
+import { CvFeed } from './cvFeed';
 
 // ─── Scene ─────────────────────────────────────────────────────────────────
 
@@ -37,9 +41,13 @@ scene.add(camera);
 const gloves = new PlayerGloves();
 camera.add(gloves.root);
 
-const opponent = new Boxer(0x0984e3);
-opponent.root.position.z = -0.75;
+const opponent = new Boxer();
+// Let Boxer use its own BOT_POSITION (0, 0, -2.6); 3 m across the ring from the camera.
 scene.add(opponent.root);
+
+// ── Maharagas Wheel ─────────────────────────────────────────────────────
+const wheel = new MahoragasWheel();
+scene.add(wheel.group);
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -49,44 +57,18 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Coach ─────────────────────────────────────────────────────────────────
+// ─── Debug + adaptation + corner scene (declared early; initialized after server/hud) ─
 
-// SimulatedCvProvider = keyboard sim → punch types + guard + dodge + lean.
-const COACH_CAPS: Capability[] = ['punch_types', 'guard', 'dodge', 'lean'];
-
-const coachAudio = createCoachAudio({ ttsUrl: '/api/tts' });
-let coach: LiveCoach | undefined;
-let coachMatchId = '';
-
-function ensureCoach(matchId: string) {
-  if (coach && coachMatchId === matchId) return;
-  coachMatchId = matchId;
-  coach = new LiveCoach({
-    fightId: matchId,
-    capabilities: COACH_CAPS,
-    wallNow: () => performance.now(),
-    requestCoach: async (req) => {
-      const res = await fetch('/api/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
-      });
-      return res.json();
-    },
-    play: (cue) => coachAudio.play(cue),
-    stop: () => coachAudio.stop(),
-    onCaption: (cue, info) => {
-      hud.toast(`[coach] ${cue.text}`, 'info');
-      console.log(`[coach:${info.source}] ${cue.text}`);
-    },
-    log: (m) => console.log('[coach]', m),
-  });
-}
+let debugLog: DebugLog | undefined;
+let adaptationManager: AdaptationManager | undefined;
+let cornerScene: CornerScene | undefined;
+let cinematicMode = false;
 
 // ─── Game state ────────────────────────────────────────────────────────────
 
 const hudState: HudState = { server: 'connecting', tracking: 'calibrating', queued: false };
 let view: MatchView | undefined;
+let debriefShown = false;
 let latest: Observation | undefined;
 let myPose: PoseState = { body: 'neutral', guards: { left: 'neutral', right: 'neutral' } };
 let shakeUntil = 0;
@@ -107,16 +89,24 @@ const server = new GameServer({
     const side = atk.punchType === 'hook' ? (atk.hand === 'left' ? ' from your right' : ' from your left') : '';
     hud.telegraph(`${PUNCH_NAME[atk.punchType]}${side}`, ANSWER[atk.punchType], impactMs - Date.now());
   },
+  onFightWindow(window, strategy) {
+    const attempts = window.playerJabs + window.playerStraights + window.playerHooks +
+      window.playerUppercuts + window.playerUnclassified;
+    debugLog?.add('window', `W#${window.id} player+${window.playerLanded}/${attempts} bot-${window.botHealth}hp trk=${(window.trackingCoverage * 100).toFixed(0)}%`);
+    adaptationManager?.onWindow(window, strategy);
+  },
   onAttackResolved(atk, v) {
     if (atk.result === 'cancelled') return;
-    // Feed resolved attack to coach before UI updates.
-    if (coach && coachMatchId === String(v.match.id)) {
-      coach.ingest([attackToRawEvent(atk, v.match, v.me)]);
-    }
     const counter = atk.counter && atk.result !== 'dodged' ? ' · COUNTER' : '';
     if (atk.attackerSlot === v.me.slot) {
       if (v.match.mode === 'bot') opponent.showDefense(atk.defenderBody as Body, atk.defenderGuard);
-      if (atk.result === 'landed') opponent.takeHit();
+      if (atk.result === 'landed') {
+        opponent.takeHit();
+        // Claude Tyson reacts to taking damage (occasional, not every hit)
+        if (Math.random() < 0.35) {
+          hud.showDialogue(pickLine(atk.damage >= 9 ? 'hit_taken_heavy' : 'hit_taken_light'));
+        }
+      }
       const text = OFFENSE_TEXT[atk.detail] ?? atk.result;
       hud.toast(atk.damage > 0 ? `${text} −${atk.damage}${counter}` : text, atk.damage > 0 ? 'good' : 'info');
       return;
@@ -131,6 +121,10 @@ const server = new GameServer({
       hud.flashDamage();
       shakeUntil = performance.now() + 220;
       hud.toast(`${text} −${atk.damage}${counter}`, 'bad');
+      // Claude Tyson taunts when he lands
+      if (Math.random() < 0.28) {
+        hud.showDialogue(pickLine('hit_landed'));
+      }
     } else {
       hud.toast(atk.result === 'dodged' ? `${text} · counter ready` : text, 'good');
     }
@@ -144,31 +138,140 @@ const hud = new Hud({
   forfeit: () => view && server.forfeit(view.match.id),
 });
 
+// Initialize debug log and adaptation manager now that server + hud exist.
+debugLog = new DebugLog();
+adaptationManager = new AdaptationManager({
+  server,
+  requestStrategist: async (req) => {
+    const res = await fetch('/api/strategist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`strategist ${res.status}`);
+    return res.json();
+  },
+  onStrategyApplied: (explanation) => {
+    // Maharagas wheel clanks + JJK dialogue + purple flash
+    wheel.clank();
+    hud.showAdaptedTag(explanation);
+    hud.showDialogue(pickLine('adaptation'));
+    debugLog?.add('strategy', `ADAPTED: ${explanation}`);
+  },
+  onAdaptation: (outcome, explanation) => {
+    hud.showAdaptation(outcome, explanation);
+    debugLog?.add('outcome', `${outcome === 'improved' ? 'KEPT ✓' : 'NOTED ✗'} — ${explanation}`);
+  },
+  log: (msg) => debugLog?.add('strategy', msg),
+});
+
+cornerScene = new CornerScene({
+  scene,
+  camera,
+  onAnalysis: (text, source) => {
+    hud.showCornerAnalysis(text, source, () => {
+      // "GOT IT" pressed: exit corner scene, show menu again
+      cinematicMode = false;
+      cornerScene?.exit();
+      refresh();
+    });
+    debugLog?.add('analysis', `[${source.toUpperCase()}] ${text}`);
+  },
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === '`') debugLog?.toggle();
+});
+
+let prevMatchId: string | undefined;
+let prevMatchStatus: string | undefined;
+
 function refresh() {
   view = server.currentMatch();
   hudState.view = view;
   hudState.result = view ? server.result(view.match.id) : undefined;
   hudState.profile = server.profile();
   hudState.queued = server.inQueue();
+  hudState.cinematic = cinematicMode;
   hud.render(hudState);
-  // Start coach when a bot match goes active.
-  if (view?.match.status === 'active' && view.match.mode === 'bot') {
-    ensureCoach(String(view.match.id));
+
+  const matchId = view ? String(view.match.id) : undefined;
+  const status = view?.match.status;
+
+  // New active match started
+  if (status === 'active' && view?.match.mode === 'bot') {
+    if (matchId !== prevMatchId) {
+      // New fight: reset state, show wheel, opening taunt
+      debriefShown = false;
+      adaptationManager?.reset();
+      cinematicMode = false;
+      hud.hideCornerAnalysis();
+      cornerScene?.exit();
+      wheel.show();
+      hud.showDialogue(pickLine('fight_start'));
+    }
   }
+
+  // Fight just finished — show result briefly, then enter corner scene after 2s
+  if (!debriefShown && status !== 'active' && prevMatchStatus === 'active') {
+    debriefShown = true;
+    const won = hudState.result?.winnerSlot === view?.me.slot;
+    hud.showDialogue(pickLine(won ? 'fight_end_win' : 'fight_end_lose'));
+    wheel.hide();
+
+    if (view && !cinematicMode) {
+      const capturedView = view;
+      const capturedWon = won ?? false;
+      // Let the result screen show for 2s, then transition to corner scene
+      setTimeout(() => {
+        cinematicMode = true;
+        hudState.cinematic = true;
+        hud.render(hudState); // hide menu
+        cornerScene?.enter(
+          server.conn,
+          capturedView.match.id,
+          capturedWon,
+          hudState.result?.reason ?? 'time',
+          wheel.totalClanks,
+        );
+      }, 2000);
+    }
+  }
+
+  prevMatchId = matchId;
+  prevMatchStatus = status;
 }
 
 // ─── CV input ──────────────────────────────────────────────────────────────
 
-// Swap this for Hani's provider (Python WebSocket bridge or browser worker) once ready.
-const cv: CvProvider = new SimulatedCvProvider();
+// Real provider by default; ?sim forces keyboard simulation.
+const useSim = new URLSearchParams(location.search).has('sim');
+const cv: CvProvider = useSim ? new SimulatedCvProvider() : new RealCvProvider();
+hudState.cvSource = cv.source === 'live' ? 'live' : 'synthetic';
+const calibration = new CalibrationScreen(useSim);
+// Only show the camera feed PiP when using real CV (not sim)
+const cvFeed = useSim ? null : new CvFeed();
+let simFallbackSignalled = false;
+
 cv.start((obs, events) => {
   const trackingChanged = obs.trackingState !== hudState.tracking;
   latest = obs;
   hudState.tracking = obs.trackingState;
   hudState.trackingReason = obs.reason;
 
+  // Detect when RealCvProvider has fallen back to sim (sessionId begins with 'sim-')
+  const isSim = (obs as any).sessionId?.startsWith('sim-') ?? false;
+  if (isSim && !simFallbackSignalled) {
+    simFallbackSignalled = true;
+    hudState.cvSource = 'synthetic';
+    calibration.onSimFallback();
+  } else if (!isSim) {
+    calibration.onTrackingState(obs.trackingState);
+  }
+
   myPose = poseOf(obs);
   hudState.pose = myPose;
+  cvFeed?.update(obs);
   gloves.setMarker('left', obs.validity.punch_left ? obs.markers.left : undefined);
   gloves.setMarker('right', obs.validity.punch_right ? obs.markers.right : undefined);
   gloves.setGuard('left', myPose.guards.left);
@@ -191,22 +294,29 @@ refresh();
 // ─── Frame loop ────────────────────────────────────────────────────────────
 
 const clock = new THREE.Clock();
+let lowHpDialogueShown = false;
+
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = performance.now();
 
-  // Player dodge: slide + slight roll from the CV lateral displacement.
-  const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;
-  const targetX = EYE.x + lateral * BODY_WIDTH_M;
-  const leanBack = myPose.body === 'lean_back' ? 1 : 0;
-  camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 18);
-  camera.position.z += (EYE.z + leanBack * 0.32 - camera.position.z) * Math.min(1, dt * 18);
-  camera.rotation.z = -lateral * 0.12;
-  camera.rotation.x += (BASE_PITCH + leanBack * 0.12 - camera.rotation.x) * Math.min(1, dt * 18);
-  if (t < shakeUntil) {
-    camera.position.y = EYE.y + (Math.random() - 0.5) * 0.04;
-  } else {
-    camera.position.y = EYE.y;
+  // ── Corner scene owns camera during cinematic mode ──────────────────────
+  const cinematic = cornerScene?.update(dt) ?? false;
+
+  if (!cinematic) {
+    // Player dodge: slide + slight roll from the CV lateral displacement.
+    const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;
+    const targetX = EYE.x + lateral * BODY_WIDTH_M;
+    const leanBack = myPose.body === 'lean_back' ? 1 : 0;
+    camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 18);
+    camera.position.z += (EYE.z + leanBack * 0.32 - camera.position.z) * Math.min(1, dt * 18);
+    camera.rotation.z = -lateral * 0.12;
+    camera.rotation.x += (BASE_PITCH + leanBack * 0.12 - camera.rotation.x) * Math.min(1, dt * 18);
+    if (t < shakeUntil) {
+      camera.position.y = EYE.y + (Math.random() - 0.5) * 0.04;
+    } else {
+      camera.position.y = EYE.y;
+    }
   }
 
   // PvP opponent mirrors the other player's lateral; their left is my right.
@@ -218,11 +328,17 @@ renderer.setAnimationLoop(() => {
 
   opponent.update(dt, Date.now());
   gloves.update(dt);
+  wheel.update(dt);
   hud.tick(view);
-  // Coach: update fight row snapshot + pump scheduler.
-  if (coach && view && coachMatchId === String(view.match.id)) {
-    coach.update(matchToFightRow(view.match, view.me, view.opponent));
-    coach.tick();
+
+  // Low-HP dialogue (bot below 30) — once per match
+  if (view?.match.status === 'active' && !lowHpDialogueShown) {
+    if (view.opponent.health < 30) {
+      lowHpDialogueShown = true;
+      hud.showDialogue(pickLine('low_hp'));
+    }
   }
+  if (view?.match.status !== 'active') lowHpDialogueShown = false;
+
   renderer.render(scene, camera);
 });

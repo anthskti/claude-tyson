@@ -1,9 +1,5 @@
 import type { PoseState, TrackingState } from './cv/contract';
-import { RULES_HTML } from './combatText';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
-
-// Plain-DOM HUD. Re-rendered on server changes; the timer and health bars are also
-// refreshed every frame via tick().
 
 export interface HudActions {
   fightBot(): void;
@@ -22,13 +18,14 @@ export interface HudState {
   profile?: ProfileRow;
   queued: boolean;
   pose?: PoseState;
+  cvSource?: 'live' | 'synthetic';
+  cinematic?: boolean; // true while corner scene owns the camera
 }
 
 const el = (id: string) => document.getElementById(id)!;
 
 export class Hud {
   private root = document.getElementById('hud')!;
-
   private actions: HudActions;
 
   constructor(actions: HudActions) {
@@ -39,19 +36,18 @@ export class Hud {
         <div id="timer" class="timer">3:00</div>
         <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div></div>
       </div>
-      <div id="status" class="status"></div>
+      <div id="server-dot" class="server-dot"></div>
       <div id="menu" class="menu"></div>
       <div id="adapt" class="adapt"></div>
+      <div id="adapted-tag" class="adapted-tag"></div>
       <div id="pause" class="pause"></div>
       <div id="toasts" class="toasts"></div>
       <div id="vignette" class="vignette"></div>
-      <div id="pose" class="pose"></div>
+      <div id="adapt-vignette" class="adapt-vignette"></div>
+      <div id="dialogue" class="dialogue"></div>
       <div id="telegraph" class="telegraph"></div>
-      <div class="keys">
-        body <b>A</b>/<b>D</b> slip · <b>S</b> lean back &nbsp;|&nbsp; guard <b>Q</b>/<b>E</b> one side · <b>W</b> both &nbsp;|&nbsp;
-        left <b>J</b> jab · <b>U</b> hook · <b>M</b> upper &nbsp;|&nbsp; right <b>K</b> straight · <b>I</b> hook · <b>,</b> upper
-        &nbsp;|&nbsp; <b>T</b> lose tracking · <b>C</b> recalibrate
-      </div>`;
+      <div id="corner-analysis" class="corner-analysis"></div>`;
+
     this.root.addEventListener('click', e => {
       const action = (e.target as HTMLElement).dataset.action as keyof HudActions | undefined;
       if (action) this.actions[action]();
@@ -61,36 +57,34 @@ export class Hud {
   render(s: HudState) {
     const active = s.view?.match.status === 'active';
 
-    el('status').innerHTML = `
-      <span class="chip ${s.server}">server: ${s.server}</span>
-      <span class="chip ${s.tracking === 'good' ? 'online' : 'warn'}">cv: ${s.tracking}</span>
-      <span class="chip synthetic">simulated input</span>`;
+    // Tiny server status dot
+    const dot = el('server-dot');
+    dot.className = `server-dot ${s.server}`;
+    dot.title = `Server: ${s.server}${s.serverDetail ? ` (${s.serverDetail})` : ''}`;
 
-    el('opp-name').textContent = s.view?.match.mode === 'bot' ? `BOT` : 'OPPONENT';
+    el('opp-name').textContent = s.view?.match.mode === 'bot' ? 'CLAUDE TYSON' : 'OPPONENT';
 
     const menu = el('menu');
-    menu.style.display = active ? 'none' : 'flex';
-    if (!active) menu.innerHTML = this.menuHtml(s);
+    const showMenu = !active && !s.cinematic;
+    menu.style.display = showMenu ? 'flex' : 'none';
+    if (showMenu) menu.innerHTML = this.menuHtml(s);
 
     const adapt = el('adapt');
     const strat = s.view?.strategy;
     adapt.style.display = active && strat ? 'block' : 'none';
     if (strat) {
       adapt.innerHTML = `
-        <div class="label">Bot strategy · rev ${strat.revision}</div>
-        <div class="explain">${escapeHtml(strat.explanation)}</div>
-        <div class="nums">aggr ${strat.aggression.toFixed(2)} · interval ${strat.punchIntervalMs}ms ·
-          mix J/S/H/U ${[strat.jabWeight, strat.straightWeight, strat.hookWeight, strat.uppercutWeight].map(w => w.toFixed(2)).join('/')} ·
-          left ${(strat.leftBias * 100).toFixed(0)}% · defends ${(strat.defenseRate * 100).toFixed(0)}% ·
-          telegraph ${strat.telegraphMs}ms</div>`;
+        <div class="label">Strategy rev ${strat.revision}</div>
+        <div class="explain">${escapeHtml(strat.explanation)}</div>`;
     }
 
     const paused = active && s.tracking !== 'good';
     el('pause').style.display = paused ? 'flex' : 'none';
     if (paused) {
-      el('pause').innerHTML = `<div><h2>${s.tracking === 'calibrating' ? 'Calibrating…' : 'Tracking lost'}</h2>
+      el('pause').innerHTML = `<div>
+        <h2>${s.tracking === 'calibrating' ? 'Calibrating…' : 'Tracking lost'}</h2>
         <p>${s.trackingReason ?? 'Step back into frame and return to guard.'}</p>
-        <p class="dim">The bot holds fire and incoming hits are unscorable until tracking recovers.</p></div>`;
+      </div>`;
     }
   }
 
@@ -100,28 +94,22 @@ export class Hud {
     if (s.view && s.result) {
       const w = s.result.winnerSlot;
       const outcome = w === undefined ? 'DRAW' : w === s.view.me.slot ? 'YOU WIN' : 'YOU LOSE';
-      resultHtml = `<div class="result"><h2>${outcome}</h2><div class="dim">by ${s.result.reason}</div>
-        ${s.result.analysis ? `<p>${escapeHtml(s.result.analysis)}</p>` : ''}</div>`;
+      resultHtml = `<div class="result"><h2>${outcome}</h2><div class="dim">by ${s.result.reason}</div></div>`;
     }
     const p = s.profile;
     const profileHtml = p
-      ? `<div class="profile">
-          <div><b>${p.wins}</b>-<b>${p.losses}</b> in ${p.matchesPlayed} fights</div>
-          <div>jab ${p.jabs} · straight ${p.straights} · hook ${p.hooks} · upper ${p.uppercuts} · landed ${p.punchesLanded} · counters ${p.counters}</div>
-          <div>of ${p.defenseOpportunities} incoming: slipped ${p.slips} · leaned back ${p.leanBacks} · blocked ${p.blocks} · hit ${p.hitsTaken}</div>
-        </div>`
+      ? `<div class="profile"><div><b>${p.wins}</b>W · <b>${p.losses}</b>L · ${p.matchesPlayed} fights</div></div>`
       : '';
     return `
       <h1>CLAUDE TYSON</h1>
       ${resultHtml}
       <div class="buttons">
-        <button data-action="fightBot" ${offline ? 'disabled' : ''}>Fight adaptive bot</button>
+        <button data-action="fightBot" ${offline ? 'disabled' : ''}>Fight Claude Tyson</button>
         ${s.queued
           ? `<button data-action="cancelPvp" class="secondary">Waiting for opponent… cancel</button>`
-          : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP match</button>`}
+          : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP Match</button>`}
       </div>
-      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module. You can still shadowbox.</div>` : ''}
-      ${RULES_HTML}
+      ${offline ? `<div class="dim small">Server ${s.server}${s.serverDetail ? ` · ${escapeHtml(s.serverDetail)}` : ''}</div>` : ''}
       ${profileHtml}`;
   }
 
@@ -137,13 +125,8 @@ export class Hud {
     el('timer').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
   }
 
-  renderPose(pose: PoseState) {
-    const body = { neutral: 'NEUTRAL', lean_left: '◀ SLIP LEFT', lean_right: 'SLIP RIGHT ▶', lean_back: '▼ LEAN BACK' }[pose.body];
-    const g = (on: boolean) => (on ? 'BLOCK' : '—');
-    el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}</span>`;
-  }
+  renderPose(_pose: PoseState) { /* pose display removed for clean UI */ }
 
-  /** Name the incoming punch and the answers to it, until it lands. */
   telegraph(name: string, answer: string, msUntilImpact: number) {
     const t = el('telegraph');
     t.innerHTML = `<div class="incoming">${name}</div><div class="answer">${answer}</div>`;
@@ -152,11 +135,68 @@ export class Hud {
     this.telegraphTimer = window.setTimeout(() => this.clearTelegraph(), Math.max(0, msUntilImpact) + 300);
   }
 
-  clearTelegraph() {
-    el('telegraph').style.display = 'none';
+  clearTelegraph() { el('telegraph').style.display = 'none'; }
+  private telegraphTimer = 0;
+
+  showDialogue(line: string) {
+    const d = el('dialogue');
+    d.textContent = `"${line}"`;
+    d.classList.remove('visible');
+    void d.offsetWidth;
+    d.classList.add('visible');
+    clearTimeout(this.dialogueTimer);
+    this.dialogueTimer = window.setTimeout(() => d.classList.remove('visible'), 4200);
+  }
+  private dialogueTimer = 0;
+
+  showAdaptedTag(explanation: string) {
+    const tag = el('adapted-tag');
+    tag.innerHTML = `<span class="adapted-label">ADAPTED</span><span class="adapted-explain">${escapeHtml(explanation)}</span>`;
+    tag.classList.remove('visible');
+    void tag.offsetWidth;
+    tag.classList.add('visible');
+    clearTimeout(this.adaptedTagTimer);
+    this.adaptedTagTimer = window.setTimeout(() => tag.classList.remove('visible'), 3500);
+    const v = el('adapt-vignette');
+    v.classList.remove('flash');
+    void v.offsetWidth;
+    v.classList.add('flash');
+  }
+  private adaptedTagTimer = 0;
+
+  showAdaptation(outcome: string, explanation: string) {
+    this.toast(outcome === 'improved' ? 'STRATEGY TUNED ✓' : 'STRATEGY REVISED', outcome === 'improved' ? 'good' : 'info');
+    const adapt = el('adapt');
+    adapt.classList.remove('adapt-flash');
+    void adapt.offsetWidth;
+    adapt.classList.add('adapt-flash');
+    let flash = adapt.querySelector('.adapt-outcome') as HTMLElement | null;
+    if (!flash) { flash = document.createElement('div'); flash.className = 'adapt-outcome'; adapt.appendChild(flash); }
+    flash.textContent = `${outcome === 'improved' ? '✓' : '✗'} ${explanation}`;
   }
 
-  private telegraphTimer = 0;
+  /** Corner speech bubble — overlaid on the 3D scene, visible once camera reaches corner. */
+  showCornerAnalysis(analysis: string, source: 'claude' | 'offline', onDismiss?: () => void) {
+    const d = el('corner-analysis');
+    const badge = source === 'claude'
+      ? `<span class="ca-badge ca-claude">CLAUDE</span>`
+      : `<span class="ca-badge ca-offline">CORNER</span>`;
+    d.innerHTML = `
+      <div class="ca-bubble">
+        <div class="ca-top">YOUR CORNER SAYS ${badge}</div>
+        <p class="ca-text">${escapeHtml(analysis).replace(/\n/g, '<br>')}</p>
+        <button class="ca-close">GOT IT →</button>
+      </div>`;
+    d.style.display = 'flex';
+    d.querySelector('.ca-close')!.addEventListener('click', () => {
+      d.style.display = 'none';
+      onDismiss?.();
+    });
+  }
+
+  hideCornerAnalysis() { el('corner-analysis').style.display = 'none'; }
+
+  showDebrief(analysis: string) { this.showCornerAnalysis(analysis, 'offline'); }
 
   toast(text: string, kind: 'good' | 'bad' | 'info' = 'info') {
     const t = document.createElement('div');
@@ -169,11 +209,11 @@ export class Hud {
   flashDamage() {
     const v = el('vignette');
     v.classList.remove('hit');
-    void v.offsetWidth; // restart the CSS animation
+    void v.offsetWidth;
     v.classList.add('hit');
   }
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]!);
 }

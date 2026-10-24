@@ -16,6 +16,7 @@ export type MatchRow = ReturnType<Conn['db']['fightMatch']['iter']> extends Iter
 export type StrategyRow = ReturnType<Conn['db']['botStrategy']['iter']> extends Iterable<infer R> ? R : never;
 export type ResultRow = ReturnType<Conn['db']['fightResult']['iter']> extends Iterable<infer R> ? R : never;
 export type ProfileRow = ReturnType<Conn['db']['fighterProfile']['iter']> extends Iterable<infer R> ? R : never;
+export type FightWindowRow = ReturnType<Conn['db']['fightWindow']['iter']> extends Iterable<infer R> ? R : never;
 
 export interface MatchView {
   match: MatchRow;
@@ -29,6 +30,7 @@ export interface ServerEvents {
   onAttack(attack: AttackRow, view: MatchView): void;
   onAttackResolved(attack: AttackRow, view: MatchView): void;
   onChange(): void;
+  onFightWindow?: (window: FightWindowRow, strategy: StrategyRow | undefined) => void;
 }
 
 export function tokenKey(): string {
@@ -115,6 +117,11 @@ export class GameServer {
     conn.db.fighterProfile.onUpdate(changed);
     conn.db.fighterProfile.onInsert(changed);
 
+    conn.db.fightWindow.onInsert((_ctx, row) => {
+      const strategy = this.conn?.db.botStrategy.matchId.find(row.matchId) ?? undefined;
+      this.events.onFightWindow?.(row, strategy);
+    });
+
     conn.db.attack.onInsert((_ctx, atk) => {
       const view = this.matchView(atk.matchId);
       if (view) this.events.onAttack(atk, view);
@@ -178,6 +185,42 @@ export class GameServer {
 
   forfeit(matchId: bigint) {
     this.conn?.reducers.forfeit({ matchId }).catch(this.report);
+  }
+
+  applyStrategyUpdate(
+    matchId: bigint,
+    sourceWindowId: bigint,
+    baseRevision: number,
+    fields: {
+      aggression: number;
+      punchIntervalMs: number;
+      jabWeight: number;
+      straightWeight: number;
+      hookWeight: number;
+      uppercutWeight: number;
+      leftBias: number;
+      defenseRate: number;
+      telegraphMs: number;
+      explanation: string;
+    }
+  ) {
+    this.conn?.reducers
+      .applyStrategyUpdate({
+        matchId,
+        sourceWindowId,
+        baseRevision,
+        aggression: fields.aggression,
+        punchIntervalMs: fields.punchIntervalMs,
+        jabWeight: fields.jabWeight,
+        straightWeight: fields.straightWeight,
+        hookWeight: fields.hookWeight,
+        uppercutWeight: fields.uppercutWeight,
+        leftBias: fields.leftBias,
+        defenseRate: fields.defenseRate,
+        telegraphMs: fields.telegraphMs,
+        explanation: fields.explanation,
+      })
+      .catch(this.report);
   }
 
   /** Forward one CV sample. Pose is throttled; events are never dropped or merged. */

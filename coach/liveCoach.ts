@@ -56,7 +56,9 @@ export class LiveCoach {
   private status: CoachStatus = "watching";
   readonly effects: AdaptationResult[] = [];
 
-  constructor(private o: LiveCoachOptions) {
+  private o: LiveCoachOptions;
+  constructor(o: LiveCoachOptions) {
+    this.o = o;
     this.scheduler = new CoachScheduler({
       now: o.wallNow,
       play: o.play,
