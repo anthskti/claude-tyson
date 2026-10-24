@@ -48,7 +48,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="bars">
         <div class="bar me"><span class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div><div class="track stamina"><div id="stamina-me" class="fill"></div></div></div>
-        <div id="timer" class="timer">3:00</div>
+        <div class="timer-wrap"><div class="round-label">ROUND 1</div><div id="timer" class="timer">3:00</div></div>
         <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div></div>
       </div>
       <div id="server-dot" class="server-dot"></div>
@@ -65,6 +65,7 @@ export class Hud {
       <div id="telegraph" class="telegraph"></div>
       <div id="pose" class="pose"></div>
       <div id="debrief" class="debrief"></div>
+      <div id="result-card" class="result-card"></div>
       <div class="keys">
         body <b>A</b>/<b>D</b> slip · <b>S</b> lean back &nbsp;|&nbsp; guard <b>Q</b>/<b>E</b> one side · <b>W</b> both &nbsp;|&nbsp;
         left straight <b>J</b> · left hook <b>U</b> &nbsp;|&nbsp; right straight <b>K</b> · right hook <b>I</b>
@@ -161,12 +162,12 @@ export class Hud {
       ${resultHtml}
       ${this.inputPicker(s)}
       <div class="buttons">
-        <button data-action="fightBot" ${offline ? 'disabled' : ''}>Fight Claude Tyson</button>
+        <button data-action="fightBot">Fight Claude Tyson</button>
         ${s.queued
           ? `<button data-action="cancelPvp" class="secondary">Waiting for opponent… cancel</button>`
-          : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP Match</button>`}
+          : `<button data-action="findPvp" class="secondary">Find PvP Match</button>`}
       </div>
-      ${offline ? `<div class="dim small">Server ${s.server}${s.serverDetail ? ` · ${escapeHtml(s.serverDetail)}` : ''}</div>` : ''}
+      ${offline ? `<div class="dim small">Server ${s.server}${s.serverDetail ? ` · ${escapeHtml(s.serverDetail)}` : ''} — run spacetime start to play</div>` : ''}
       ${RULES_HTML}
       ${profileHtml}`;
   }
@@ -271,21 +272,62 @@ export class Hud {
     flash.textContent = `${outcome === 'improved' ? '✓' : '✗'} ${explanation}`;
   }
 
-  /** Post-fight analysis overlay from the corner scene. */
-  showCornerAnalysis(text: string, source: 'claude' | 'offline') {
+  /** Post-fight analysis speech bubble from the Claude corner. onDismiss is called when the player clicks GOT IT. */
+  showCornerAnalysis(text: string, source: 'claude' | 'offline', onDismiss?: () => void) {
     const d = el('debrief');
     const tag = source === 'claude'
       ? `<span class="debrief-source">CLAUDE ANALYSIS</span>`
-      : `<span class="debrief-source offline">OFFLINE ANALYSIS</span>`;
+      : `<span class="debrief-source offline">CORNER NOTES</span>`;
     d.innerHTML = `
       <div class="debrief-box">
-        <h2>YOUR CORNER SAYS</h2>
-        ${tag}
-        <p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>
-        <button class="debrief-close" data-action="">GOT IT</button>
+        <div class="debrief-header">
+          <div class="debrief-claude-icon">C</div>
+          ${tag}
+        </div>
+        <p id="debrief-text"></p>
+        <button class="debrief-close">GOT IT</button>
       </div>`;
-    d.style.display = 'flex';
-    d.querySelector('.debrief-close')!.addEventListener('click', () => { d.style.display = 'none'; });
+    d.style.display = 'block';
+    d.querySelector('.debrief-close')!.addEventListener('click', () => {
+      d.style.display = 'none';
+      clearTimeout(this.typewriterTimer);
+      onDismiss?.();
+    });
+    // Typewriter effect
+    const textEl = document.getElementById('debrief-text')!;
+    let i = 0;
+    const type = () => {
+      textEl.textContent = text.slice(0, i);
+      if (i < text.length) {
+        i++;
+        this.typewriterTimer = window.setTimeout(type, 20);
+      }
+    };
+    clearTimeout(this.typewriterTimer);
+    window.setTimeout(type, 300); // slight delay before typing starts
+  }
+
+  /** Result card shown at fight end before corner scene. stars: 0=loss, 1-3=win quality. */
+  showResultCard(won: boolean, reason: string, stars: number) {
+    const card = el('result-card');
+    const banner = won ? 'VICTORY!' : 'DEFEAT';
+    const starsHtml = won
+      ? [1, 2, 3].map(i =>
+          `<span style="${i <= stars ? '' : 'filter:grayscale(1) opacity(0.3)'}">⭐</span>`
+        ).join('')
+      : '';
+    card.innerHTML = `<div class="result-card-inner">
+      <div class="result-card-banner ${won ? 'win' : 'lose'}">${banner}</div>
+      <div class="result-card-by">by ${escapeHtml(reason)}</div>
+      ${won ? `<div class="result-stars">${starsHtml}</div>` : ''}
+    </div>`;
+    card.style.display = 'flex';
+    clearTimeout(this.resultCardTimer);
+    // Fade out at 2000ms, hide at 2400ms
+    this.resultCardTimer = window.setTimeout(() => {
+      card.classList.add('fade-out');
+      window.setTimeout(() => { card.style.display = 'none'; card.classList.remove('fade-out'); }, 400);
+    }, 2000);
   }
 
   toast(text: string, kind: 'good' | 'bad' | 'info' = 'info') {
@@ -306,6 +348,8 @@ export class Hud {
   private telegraphTimer = 0;
   private dialogueTimer = 0;
   private adaptedTagTimer = 0;
+  private resultCardTimer = 0;
+  private typewriterTimer = 0;
   private calibrationKey = '';
 }
 

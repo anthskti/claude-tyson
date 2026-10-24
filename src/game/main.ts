@@ -90,6 +90,8 @@ let cinematicMode = false;
 let lowHpDialogueShown = false;
 let winningDialogueShown = false;
 let losingDialogueShown = false;
+let slowmoUntil = -Infinity;
+let koFlashTriggered = false;
 
 const server = new GameServer({
   onStatus(status, detail) {
@@ -143,8 +145,14 @@ const server = new GameServer({
 });
 
 const hud = new Hud({
-  fightBot: () => beforeFight(() => server.startBotMatch()),
-  findPvp: () => beforeFight(() => server.joinPvp()),
+  fightBot: () => {
+    if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
+    beforeFight(() => server.startBotMatch());
+  },
+  findPvp: () => {
+    if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
+    beforeFight(() => server.joinPvp());
+  },
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),
   useKeyboard: () => setInput('keyboard'),
@@ -181,7 +189,7 @@ const adaptationManager = new AdaptationManager({
 const cornerScene = new CornerScene({
   scene,
   camera,
-  onAnalysis: (text, source) => hud.showCornerAnalysis(text, source),
+  onAnalysis: (text, source) => hud.showCornerAnalysis(text, source, () => cornerScene.exit()),
 });
 window.addEventListener('keydown', (e) => { if (e.key === '`') debugLog.toggle(); });
 
@@ -203,7 +211,9 @@ function refresh() {
     lowHpDialogueShown = false;
     winningDialogueShown = false;
     losingDialogueShown = false;
-    adaptationManager.reset();
+    koFlashTriggered = false;
+    slowmoUntil = -Infinity;
+    adaptationManager.reset(view.match.id);
     cinematicMode = false;
     cornerScene.exit();
     wheel.show();
@@ -214,12 +224,18 @@ function refresh() {
   if (!debriefShown && status !== 'active' && prevMatchStatus === 'active') {
     debriefShown = true;
     const won = hudState.result?.winnerSlot === view?.me.slot;
+    const reason = hudState.result?.reason ?? 'time';
     hud.showDialogue(pickLine(won ? 'fight_end_win' : 'fight_end_lose'));
     if (view && !cinematicMode) {
-      cinematicMode = true;
-      hudState.cinematic = true;
-      wheel.hide();
-      cornerScene.enter(server.conn, view.match.id, won ?? false, hudState.result?.reason ?? 'time', wheel.totalClanks);
+      const stars = won ? (view.me.health >= 700 ? 3 : view.me.health >= 350 ? 2 : 1) : 0;
+      hud.showResultCard(won, reason, stars);
+      const snap = view; // capture for closure
+      window.setTimeout(() => {
+        cinematicMode = true;
+        hudState.cinematic = true;
+        wheel.hide();
+        cornerScene.enter(server.conn, snap.match.id, won, reason, wheel.totalClanks);
+      }, 2400);
     }
   }
 
@@ -388,21 +404,23 @@ refresh();
 
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = Math.min(clock.getDelta(), 0.05);
   const t = performance.now();
+  const dt = rawDt * (t < slowmoUntil ? 0.22 : 1);
 
   // Corner scene owns camera during cinematic mode.
   const cinematic = cornerScene.update(dt);
   if (cinematic !== cinematicMode) {
     cinematicMode = cinematic;
     hudState.cinematic = cinematic;
+    hud.render(hudState); // show/hide menu immediately when cinematic state changes
   }
 
   if (!cinematic) {
     // Player dodge: slide + slight roll from the CV lateral displacement.
     const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;
     const targetX = EYE.x + lateral * BODY_WIDTH_M;
-    const leanBack = myPose.body === 'lean_back' ? 1 : 0;
+    const leanBack = 0; // lean_back not in Body type; lateral-only dodge
     camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 18);
     camera.position.z += (EYE.z + leanBack * 0.32 - camera.position.z) * Math.min(1, dt * 18);
     camera.rotation.z = -lateral * 0.12;
@@ -421,8 +439,12 @@ renderer.setAnimationLoop(() => {
     opponent.setPose(pvpOpponent.bodyState as Body, pvpOpponent.leftGuard as Guard, pvpOpponent.rightGuard as Guard);
   }
 
-  if (view && view.opponent.health <= 0) opponent.knockout();
-  else opponent.standUp();
+  if (view && view.opponent.health <= 0) {
+    if (!koFlashTriggered) { koFlashTriggered = true; slowmoUntil = t + 900; }
+    opponent.knockout();
+  } else {
+    opponent.standUp();
+  }
 
   // Dialogue triggers (once per match).
   if (view?.match.status === 'active') {
