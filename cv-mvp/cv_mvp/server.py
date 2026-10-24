@@ -243,6 +243,10 @@ class Bridge:
             self.active = False
 
 
+# The hosted game (claude-tyson Vercel project) is allowed alongside local dev.
+DEPLOYED_ORIGIN = "https://claude-tyson.vercel.app"
+
+
 async def serve(
     pipeline,
     host="127.0.0.1",
@@ -264,6 +268,7 @@ async def serve(
     allowed = [
         None,
         re.compile(r"^http://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"),
+        DEPLOYED_ORIGIN,
         *origins,
     ]
     try:

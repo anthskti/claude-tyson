@@ -94,7 +94,7 @@ These are concrete MVP definitions derived from the proposal, not an assertion t
 
 `CvProvider` aligns Python/browser monotonic clocks, rejects stale or malformed samples, deduplicates movement IDs, checks sequence coverage, and clears transient input on disconnect/reset. `canScore` is an **input dispatch gate**, not a hit verdict. The example conservatively waits for valid dodge/head tracking before dispatching; hands can still be tracked while head initialization is pending. Synthetic and replay packets cannot score unless a caller explicitly enables test input. Always consume the provider's filtered `events`, not the raw packet's event array.
 
-Run the frontend locally over HTTP for the simplest MVP. The bridge permits localhost HTTP origins by default. An additional exact origin can be allowed with `--origin https://your-frontend.example`; that does not provide TLS or override browser mixed-content/local-network rules. A hosted HTTPS frontend may require a secure local bridge or a browser-native CV implementation. Keep the default loopback bind for this MVP.
+Run the frontend locally over HTTP for the simplest MVP. The bridge permits localhost HTTP origins and the deployed game at `https://claude-tyson.vercel.app` by default. An additional exact origin can be allowed with `--origin https://your-frontend.example`; that does not provide TLS or override browser mixed-content/local-network rules. A hosted HTTPS frontend may require a secure local bridge or a browser-native CV implementation. Keep the default loopback bind for this MVP.
 
 ## 4. Measure latency
 
