@@ -124,8 +124,16 @@ export class Boxer {
   private meshes: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] }[] = [];
   private variants: Partial<Record<Corner, Map<THREE.Material, THREE.Material>>> = {};
 
+  // Wii-style hit stagger
+  private hitReact = { t: -Infinity, heavy: false, side: 0 };
+  private hitLight: THREE.PointLight;
+
   constructor() {
     this.root.position.copy(BOT_POSITION);
+    // White flash light, off by default
+    this.hitLight = new THREE.PointLight(0xffffee, 0, 3.5, 2);
+    this.hitLight.position.set(0, 1.5, 0.4);
+    this.root.add(this.hitLight);
     void new GLTFLoader().loadAsync(BOT_URL).then(gltf => {
       gltf.scene.traverse(o => {
         const mesh = o as THREE.Mesh;
@@ -183,9 +191,10 @@ export class Boxer {
     this.anim?.playPunch(punchSlot(hand, type));
   }
 
-  /** Resolved landed hit. Visual only. */
-  takeHit() {
+  /** Resolved landed hit. Visual only. heavy=true for big Wii stagger. */
+  takeHit(heavy = false) {
     if (this.down) return;
+    this.hitReact = { t: performance.now(), heavy, side: Math.random() < 0.5 ? -1 : 1 };
     this.anim?.playHit();
   }
 
@@ -223,6 +232,26 @@ export class Boxer {
 
     this.lateral += (this.targetLateral - this.lateral) * Math.min(1, dt * 10);
     this.root.position.x = BOT_POSITION.x + this.lateral;
+
+    // Wii-style hit stagger: reel back, tilt, white flash
+    const hitAge = (t - this.hitReact.t) / 1000;
+    const hitDur = this.hitReact.heavy ? 0.55 : 0.35;
+    if (hitAge >= 0 && hitAge < hitDur) {
+      const p = hitAge / hitDur;
+      const decay = Math.pow(1 - p, 1.5);
+      const wobble = Math.sin(p * Math.PI * 3.5) * decay;
+      // Reel toward camera (+Z), tilt, head snap
+      this.root.position.z = BOT_POSITION.z + decay * (this.hitReact.heavy ? 0.28 : 0.16);
+      if (this.model) {
+        this.model.rotation.x = wobble * (this.hitReact.heavy ? 0.22 : 0.12);
+        this.model.rotation.z = this.hitReact.side * decay * (this.hitReact.heavy ? 0.18 : 0.09);
+      }
+      this.hitLight.intensity = (1 - p) * (this.hitReact.heavy ? 12 : 6);
+    } else {
+      this.root.position.z = BOT_POSITION.z;
+      if (this.model) { this.model.rotation.x = 0; this.model.rotation.z = 0; }
+      this.hitLight.intensity = 0;
+    }
 
     if (!this.down) {
       const pose = this.flash ?? this.pose;

@@ -10,6 +10,11 @@ import { poseOf, type Body, type CvProvider, type Guard, type Observation, type 
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView } from './net/server';
 import { Hud, type HudState, type InputMode } from './hud';
+import { MahoragasWheel } from './scene/mahoragasWheel';
+import { CornerScene } from './cornerScene';
+import { AdaptationManager } from './adaptationManager';
+import { DebugLog } from './debugLog';
+import { pickLine } from './dialogue';
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -45,6 +50,11 @@ camera.add(gloves.root);
 const opponent = new Boxer();
 scene.add(opponent.root);
 
+// ── Maharagas Wheel / Corner Scene / debug ──────────────────────────────
+const wheel = new MahoragasWheel();
+scene.add(wheel.group);
+
+const debugLog = new DebugLog();
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -73,6 +83,13 @@ let view: MatchView | undefined;
 let latest: Observation | undefined;
 let myPose: PoseState = { body: 'neutral', guards: { left: 'neutral', right: 'neutral' } };
 let shakeUntil = 0;
+let prevMatchId: string | undefined;
+let prevMatchStatus: string | undefined;
+let debriefShown = false;
+let cinematicMode = false;
+let lowHpDialogueShown = false;
+let winningDialogueShown = false;
+let losingDialogueShown = false;
 
 const server = new GameServer({
   onStatus(status, detail) {
@@ -81,6 +98,12 @@ const server = new GameServer({
     refresh();
   },
   onChange: refresh,
+  onFightWindow(window, strategy) {
+    const att = window.playerJabs + window.playerStraights + window.playerHooks +
+      window.playerUppercuts + window.playerUnclassified;
+    debugLog.add('window', `W#${window.id} +${window.playerLanded}/${att} bot${window.botHealth}hp trk=${(window.trackingCoverage*100).toFixed(0)}%`);
+    adaptationManager?.onWindow(window, strategy);
+  },
   onAttack(atk, v) {
     if (v.match.status !== 'active' || atk.attackerSlot === v.me.slot) return;
     const cueMs = Number(atk.cueAt.microsSinceUnixEpoch / 1000n);
@@ -94,7 +117,10 @@ const server = new GameServer({
     if (atk.result === 'cancelled') return;
     if (atk.attackerSlot === v.me.slot) {
       if (v.match.mode === 'bot') opponent.showDefense(atk.defenderBody as Body, atk.defenderGuard);
-      if (atk.result === 'landed') opponent.takeHit();
+      if (atk.result === 'landed') {
+        opponent.takeHit(atk.damage >= 9);
+        if (Math.random() < 0.35) hud.showDialogue(pickLine(atk.damage >= 9 ? 'hit_taken_heavy' : 'hit_taken_light'));
+      }
       const text = OFFENSE_TEXT[atk.detail] ?? atk.result;
       hud.toast(atk.damage > 0 ? `${text} −${(atk.damage / 10).toFixed(1)}` : text, atk.damage > 0 ? 'good' : 'info');
       return;
@@ -109,6 +135,7 @@ const server = new GameServer({
       hud.flashDamage();
       shakeUntil = performance.now() + 220;
       hud.toast(`${text} −${(atk.damage / 10).toFixed(1)}`, 'bad');
+      if (Math.random() < 0.28) hud.showDialogue(pickLine('hit_landed'));
     } else {
       hud.toast(atk.result === 'dodged' ? `${text} · counter ready` : text, 'good');
     }
@@ -127,6 +154,37 @@ const hud = new Hud({
   skipCalibration: () => guardClassifier && endCalibration(true),
 });
 
+const adaptationManager = new AdaptationManager({
+  server,
+  requestStrategist: async (req) => {
+    const res = await fetch('/api/strategist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`strategist ${res.status}`);
+    return res.json();
+  },
+  onStrategyApplied: (explanation) => {
+    wheel.clank();
+    hud.showAdaptedTag(explanation);
+    hud.showDialogue(pickLine('adaptation'));
+    debugLog.add('strategy', `ADAPTED: ${explanation}`);
+  },
+  onAdaptation: (outcome, explanation) => {
+    hud.showAdaptation(outcome, explanation);
+    debugLog.add('outcome', `${outcome === 'improved' ? '✓' : '✗'} ${explanation}`);
+  },
+  log: (msg) => debugLog.add('strategy', msg),
+});
+
+const cornerScene = new CornerScene({
+  scene,
+  camera,
+  onAnalysis: (text, source) => hud.showCornerAnalysis(text, source),
+});
+window.addEventListener('keydown', (e) => { if (e.key === '`') debugLog.toggle(); });
+
 function refresh() {
   view = server.currentMatch();
   hudState.view = view;
@@ -136,6 +194,39 @@ function refresh() {
   // The Claude-themed bot is PvE only; a PvP opponent is a fighter in their corner colour.
   opponent.setLook(view?.match.mode === 'pvp' ? cornerOf(view.opponent.slot) : 'claude');
   gloves.setCorner(cornerOf(view?.me.slot ?? 0));
+
+  const matchId = view ? String(view.match.id) : undefined;
+  const status = view?.match.status;
+
+  if (status === 'active' && view?.match.mode === 'bot' && matchId !== prevMatchId) {
+    debriefShown = false;
+    lowHpDialogueShown = false;
+    winningDialogueShown = false;
+    losingDialogueShown = false;
+    adaptationManager.reset();
+    cinematicMode = false;
+    cornerScene.exit();
+    wheel.show();
+    hud.showDialogue(pickLine('fight_start'));
+    hud.toast('FIGHT STARTING…', 'info');
+  }
+
+  if (!debriefShown && status !== 'active' && prevMatchStatus === 'active') {
+    debriefShown = true;
+    const won = hudState.result?.winnerSlot === view?.me.slot;
+    hud.showDialogue(pickLine(won ? 'fight_end_win' : 'fight_end_lose'));
+    if (view && !cinematicMode) {
+      cinematicMode = true;
+      hudState.cinematic = true;
+      wheel.hide();
+      cornerScene.enter(server.conn, view.match.id, won ?? false, hudState.result?.reason ?? 'time', wheel.totalClanks);
+    }
+  }
+
+  prevMatchId = matchId;
+  prevMatchStatus = status;
+
+
   hud.render(hudState);
 }
 
@@ -300,18 +391,27 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = performance.now();
 
-  // Player dodge: slide + slight roll from the CV lateral displacement.
-  const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;
-  const targetX = EYE.x + lateral * BODY_WIDTH_M;
-  const leanBack = 0;
-  camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 18);
-  camera.position.z += (EYE.z + leanBack * 0.32 - camera.position.z) * Math.min(1, dt * 18);
-  camera.rotation.z = -lateral * 0.12;
-  camera.rotation.x += (BASE_PITCH + leanBack * 0.12 - camera.rotation.x) * Math.min(1, dt * 18);
-  if (t < shakeUntil) {
-    camera.position.y = EYE.y + (Math.random() - 0.5) * 0.04;
-  } else {
-    camera.position.y = EYE.y;
+  // Corner scene owns camera during cinematic mode.
+  const cinematic = cornerScene.update(dt);
+  if (cinematic !== cinematicMode) {
+    cinematicMode = cinematic;
+    hudState.cinematic = cinematic;
+  }
+
+  if (!cinematic) {
+    // Player dodge: slide + slight roll from the CV lateral displacement.
+    const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;
+    const targetX = EYE.x + lateral * BODY_WIDTH_M;
+    const leanBack = myPose.body === 'lean_back' ? 1 : 0;
+    camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 18);
+    camera.position.z += (EYE.z + leanBack * 0.32 - camera.position.z) * Math.min(1, dt * 18);
+    camera.rotation.z = -lateral * 0.12;
+    camera.rotation.x += (BASE_PITCH + leanBack * 0.12 - camera.rotation.x) * Math.min(1, dt * 18);
+    if (t < shakeUntil) {
+      camera.position.y = EYE.y + (Math.random() - 0.5) * 0.04;
+    } else {
+      camera.position.y = EYE.y;
+    }
   }
 
   // PvP opponent mirrors the other player's lateral; their left is my right.
@@ -324,8 +424,20 @@ renderer.setAnimationLoop(() => {
   if (view && view.opponent.health <= 0) opponent.knockout();
   else opponent.standUp();
 
+  // Dialogue triggers (once per match).
+  if (view?.match.status === 'active') {
+    if (!lowHpDialogueShown && view.opponent.health < 300) {
+      lowHpDialogueShown = true;
+      hud.showDialogue(pickLine('low_hp'));
+    }
+    const gap = view.opponent.health - view.me.health;
+    if (!winningDialogueShown && gap > 200) { winningDialogueShown = true; hud.showDialogue(pickLine('winning')); }
+    if (!losingDialogueShown && gap < -200) { losingDialogueShown = true; hud.showDialogue(pickLine('losing')); }
+  }
+
   opponent.update(dt, Date.now());
   gloves.update(dt);
+  wheel.update(dt);
   hud.tick(view);
   renderer.render(scene, camera);
 });
@@ -334,6 +446,8 @@ return () => {
   alive = false;
   renderer.setAnimationLoop(null);
   window.removeEventListener('resize', resize);
+  cornerScene.exit();
+  wheel.hide();
   bridge.stop();
   feed.hide();
   cv.stop();

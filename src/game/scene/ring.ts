@@ -124,59 +124,6 @@ export function buildArena(scene: THREE.Scene) {
     scene.add(plank);
   }
 
-  // ── Back wall — CR stone blue ────────────────────────────────────────────
-  const wallMat  = toon(0x2a4888);
-  const wallDark = toon(0x162040);
-
-  const backWall = new THREE.Mesh(new THREE.BoxGeometry(32, 14, 0.5), wallMat);
-  backWall.position.set(0, 5.8, -14);
-  backWall.receiveShadow = true;
-  scene.add(backWall);
-
-  // Brick lines on back wall (horizontal strips)
-  for (let wy = 0; wy <= 12; wy += 0.7) {
-    const brickLine = new THREE.Mesh(new THREE.BoxGeometry(32, 0.06, 0.06), wallDark);
-    brickLine.position.set(0, wy - 1.2, -13.72);
-    scene.add(brickLine);
-  }
-
-  // Side walls
-  for (const x of [-15, 15] as const) {
-    const side = new THREE.Mesh(new THREE.BoxGeometry(0.5, 14, 32), wallMat);
-    side.position.set(x, 5.8, 0);
-    side.receiveShadow = true;
-    scene.add(side);
-  }
-
-  // Ceiling — dark navy
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(32, 32), toon(0x091020));
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.set(0, 11.8, 0);
-  scene.add(ceiling);
-
-  // ── Cartoon banners — vivid purple with gold border ──────────────────────
-  const bannerMat = toon(0x9030d0, 0x5008a0, 0.35);
-  const bannerGeo = new THREE.BoxGeometry(2.6, 4.2, 0.14);
-  for (const bx of [-5.5, 0, 5.5] as const) {
-    const banner = new THREE.Mesh(bannerGeo, bannerMat);
-    banner.position.set(bx, 7.8, -13.77);
-    scene.add(banner);
-
-    // Gold border (top + bottom strip)
-    const trimMat = toon(0xffc820, 0x886000, 0.4);
-    for (const ty of [9.95, 5.7] as const) {
-      const trim = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.18, 0.18), trimMat);
-      trim.position.set(bx, ty, -13.68);
-      scene.add(trim);
-    }
-    // Side strips
-    for (const tx of [bx - 1.45, bx + 1.45] as const) {
-      const sideStrip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.6, 0.18), trimMat);
-      sideStrip.position.set(tx, 7.8, -13.68);
-      scene.add(sideStrip);
-    }
-  }
-
   // ── Hanging heavy bags — bright cartoon red ──────────────────────────────
   const bagMat   = toon(0xcc2810);  // vivid red bag
   const capMat   = toon(0x991e08);  // darker red cap
@@ -223,16 +170,6 @@ export function buildArena(scene: THREE.Scene) {
     bulb.position.set(rx, 8.35, -1.5);
     scene.add(bulb);
   }
-
-  // ── Speed-bag station — back wall left ───────────────────────────────────
-  const sbMount = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 0.5), toon(0x162040));
-  sbMount.position.set(-10, 5.0, -13.82);
-  scene.add(sbMount);
-  const sbBag = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), toon(0xdd4422));
-  sbBag.scale.set(1, 1.5, 1);
-  sbBag.position.set(-10, 5.5, -13.82);
-  sbBag.castShadow = true;
-  scene.add(sbBag);
 
   // ── Floor mat under the ring — dark blue square ──────────────────────────
   const mat = new THREE.Mesh(

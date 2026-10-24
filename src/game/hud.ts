@@ -33,6 +33,8 @@ export interface HudState {
   cameraDetail?: string;
   /** Last CV event and the key it mapped to, e.g. "punch_left hook → U". */
   lastCv?: string;
+  /** True while CornerScene owns the camera; hides the menu overlay. */
+  cinematic?: boolean;
 }
 
 const el = (id: string) => document.getElementById(id)!;
@@ -50,6 +52,7 @@ export class Hud {
         <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div></div>
       </div>
       <div id="server-dot" class="server-dot"></div>
+      <div id="status" class="status"></div>
       <div id="menu" class="menu"></div>
       <div id="adapt" class="adapt"></div>
       <div id="adapted-tag" class="adapted-tag"></div>
@@ -60,6 +63,8 @@ export class Hud {
       <div id="adapt-vignette" class="adapt-vignette"></div>
       <div id="dialogue" class="dialogue"></div>
       <div id="telegraph" class="telegraph"></div>
+      <div id="pose" class="pose"></div>
+      <div id="debrief" class="debrief"></div>
       <div class="keys">
         body <b>A</b>/<b>D</b> slip · <b>S</b> lean back &nbsp;|&nbsp; guard <b>Q</b>/<b>E</b> one side · <b>W</b> both &nbsp;|&nbsp;
         left straight <b>J</b> · left hook <b>U</b> &nbsp;|&nbsp; right straight <b>K</b> · right hook <b>I</b>
@@ -162,6 +167,7 @@ export class Hud {
           : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP Match</button>`}
       </div>
       ${offline ? `<div class="dim small">Server ${s.server}${s.serverDetail ? ` · ${escapeHtml(s.serverDetail)}` : ''}</div>` : ''}
+      ${RULES_HTML}
       ${profileHtml}`;
   }
 
@@ -179,9 +185,9 @@ export class Hud {
   }
 
   renderPose(pose: PoseState) {
-    const body = { neutral: 'NEUTRAL', lean_left: '◀ DODGE LEFT', lean_right: 'DODGE RIGHT ▶' }[pose.body];
+    const body = { neutral: 'NEUTRAL', lean_left: '◀ DODGE LEFT', lean_right: 'DODGE RIGHT ▶', lean_back: '▼ LEAN BACK' }[pose.body];
     const g = (on: boolean) => (on ? 'BLOCK' : '—');
-    el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}</span>`;
+    el('pose').innerHTML = `<span>${body ?? 'NEUTRAL'}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}</span>`;
   }
 
   /** Pre-match camera calibration overlay; pass undefined to hide it. */
@@ -198,8 +204,6 @@ export class Hud {
     const waiting = opts.camera !== 'connected'
       ? `<p class="warn">Waiting for the camera bridge. Start it in <code>cv-mvp/</code>: <code>python -m cv_mvp --camera 0</code></p>`
       : '';
-    // Rebuild only when the text changes; observations arrive at ~30 Hz and replacing the
-    // buttons that often would swallow clicks.
     const key = [v.step, v.error, opts.canSkip, opts.camera, v.seen.head, v.seen.left, v.seen.right].join('|');
     if (key === this.calibrationKey) {
       const bar = box.querySelector<HTMLElement>('.progress div');
@@ -222,7 +226,6 @@ export class Hud {
     </div>`;
   }
 
-  /** Name the incoming punch and the answers to it, until it lands. */
   telegraph(name: string, answer: string, msUntilImpact: number) {
     const t = el('telegraph');
     t.innerHTML = `<div class="incoming">${name}</div><div class="answer">${answer}</div>`;
@@ -232,7 +235,6 @@ export class Hud {
   }
 
   clearTelegraph() { el('telegraph').style.display = 'none'; }
-  private telegraphTimer = 0;
 
   showDialogue(line: string) {
     const d = el('dialogue');
@@ -243,7 +245,6 @@ export class Hud {
     clearTimeout(this.dialogueTimer);
     this.dialogueTimer = window.setTimeout(() => d.classList.remove('visible'), 4200);
   }
-  private dialogueTimer = 0;
 
   showAdaptedTag(explanation: string) {
     const tag = el('adapted-tag');
@@ -258,7 +259,6 @@ export class Hud {
     void v.offsetWidth;
     v.classList.add('flash');
   }
-  private adaptedTagTimer = 0;
 
   showAdaptation(outcome: string, explanation: string) {
     this.toast(outcome === 'improved' ? 'STRATEGY TUNED ✓' : 'STRATEGY REVISED', outcome === 'improved' ? 'good' : 'info');
@@ -271,15 +271,29 @@ export class Hud {
     flash.textContent = `${outcome === 'improved' ? '✓' : '✗'} ${explanation}`;
   }
 
-  private telegraphTimer = 0;
-  private calibrationKey = '';
+  /** Post-fight analysis overlay from the corner scene. */
+  showCornerAnalysis(text: string, source: 'claude' | 'offline') {
+    const d = el('debrief');
+    const tag = source === 'claude'
+      ? `<span class="debrief-source">CLAUDE ANALYSIS</span>`
+      : `<span class="debrief-source offline">OFFLINE ANALYSIS</span>`;
+    d.innerHTML = `
+      <div class="debrief-box">
+        <h2>YOUR CORNER SAYS</h2>
+        ${tag}
+        <p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>
+        <button class="debrief-close" data-action="">GOT IT</button>
+      </div>`;
+    d.style.display = 'flex';
+    d.querySelector('.debrief-close')!.addEventListener('click', () => { d.style.display = 'none'; });
+  }
 
   toast(text: string, kind: 'good' | 'bad' | 'info' = 'info') {
     const t = document.createElement('div');
     t.className = `toast ${kind}`;
     t.textContent = text;
     el('toasts').appendChild(t);
-    setTimeout(() => t.remove(), 900);
+    setTimeout(() => t.remove(), 1050);
   }
 
   flashDamage() {
@@ -288,6 +302,11 @@ export class Hud {
     void v.offsetWidth;
     v.classList.add('hit');
   }
+
+  private telegraphTimer = 0;
+  private dialogueTimer = 0;
+  private adaptedTagTimer = 0;
+  private calibrationKey = '';
 }
 
 function escapeHtml(s: string): string {
