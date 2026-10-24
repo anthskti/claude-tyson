@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.spacetime/
+client/module_bindings/
+bun.lock
+bun.lockb
+.env
+.env.local
+.next/

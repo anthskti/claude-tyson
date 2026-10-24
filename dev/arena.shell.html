@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Tyson Arena</title>
+<style>
+:root{--bg:#f6f4ef;--ink:#1d1b18;--muted:#6b665e;--track:#e2ddd3;--hp:#c2412d;--stam:#2f6f9f;--glove:#c2412d;--hit:#e8a33d;--panel:#fffdf8;--accent:#b4532a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161513;--ink:#ece8e0;--muted:#a19a8e;--track:#2c2a26;--hp:#e0644f;--stam:#5a9fd1;--glove:#e0644f;--hit:#f2bb5c;--panel:#201e1b;--accent:#e8875a}}
+:root[data-theme="dark"]{--bg:#161513;--ink:#ece8e0;--muted:#a19a8e;--track:#2c2a26;--hp:#e0644f;--stam:#5a9fd1;--glove:#e0644f;--hit:#f2bb5c;--panel:#201e1b;--accent:#e8875a}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;display:flex;flex-direction:column;align-items:center;padding:16px}
+h1{font-size:16px;margin:4px 0 2px} p{margin:0 0 10px;color:var(--muted);text-align:center;max-width:900px}
+canvas{width:100%;max-width:900px;height:auto;border:1px solid var(--track);border-radius:8px}
+kbd{border:1px solid var(--track);border-radius:4px;padding:0 5px}
+#camBtn{margin:4px 0 8px;padding:6px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font:14px/1.5 ui-sans-serif,sans-serif;transition:opacity .15s}
+#camBtn:disabled{opacity:.55;cursor:default}
+</style>
+<!-- MediaPipe Pose: loaded async; webcam button checks window.Pose before using it -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous" async></script>
+</head><body>
+<h1>Claude Tyson arena + live coach</h1>
+<button id="camBtn">📷 Enable Webcam</button>
+<p><kbd>J</kbd> jab <kbd>K</kbd> cross <kbd>U</kbd>/<kbd>I</kbd> hooks <kbd>N</kbd>/<kbd>M</kbd> uppercuts <kbd>Space</kbd> hold guard <kbd>A</kbd>/<kbd>D</kbd> slip <kbd>Q</kbd>/<kbd>E</kbd> hold lean <kbd>T</kbd> simulate tracking loss <kbd>R</kbd> restart</p>
+<canvas id="c" width="900" height="620"></canvas>
+<!-- hidden video element; webcam stream goes here; pose detects on raw unmirrored frames -->
+<video id="vid" autoplay playsinline muted style="position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none"></video>
+<script>/*__ARENA_JS__*/</script>
+</body></html>

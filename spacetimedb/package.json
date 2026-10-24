@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "spacetimedb": "^2.13.0"
+  },
+  "devDependencies": {
+    "typescript": "5",
+    "vitest": "^5.0.5"
+  }
+}

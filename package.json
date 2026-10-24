@@ -1,0 +1,11 @@
+{
+  "name": "claude-tyson-engine",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test engine input coach && cd spacetimedb && npx vitest run",
+    "sync": "./sync-engine.sh",
+    "arena": "bun dev/server.ts",
+    "build:arena": "bun dev/build-arena.ts"
+  }
+}
