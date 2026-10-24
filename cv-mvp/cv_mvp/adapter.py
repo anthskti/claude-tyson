@@ -4,6 +4,7 @@ from copy import deepcopy
 import math
 from .core.config import Config
 from .core.detector import Detector
+from .punch_type import PunchTyper
 
 CONTRACT_VERSION = 1
 EVENT_TYPES = (
@@ -16,19 +17,26 @@ EVENT_TYPES = (
 
 
 class CvAdapter:
-    def __init__(self, config=None, session_id=None):
+    def __init__(self, config=None, session_id=None, punch_config=None):
         self.detector = Detector(config or Config(), session_id=session_id)
+        self.punch_typer = PunchTyper(punch_config, self.detector.cfg)
         self.session_id = self.detector.session_id
         self.seq = 0
         self.reset_generation = 0
 
     def reset(self):
         self.detector.reset_calibration()
+        self.punch_typer.reset()
         self.reset_generation += 1
 
     def process(self, record, available_ms=None, source="live", trace=None):
         """No networking. Returns an unstamped sample for a sink or WebSocket mailbox."""
         native, native_events = self.detector.process(record, available_ms)
+        # v1.1: punchType on punch events (unclear ones held a few frames), plus
+        # flat hooks the core rule misses.
+        native_events = self.punch_typer.process(
+            record, native_events, self.detector, available_ms
+        )
         t = record["timestamp_ms"]
         valid = {
             key: bool(native["validity"].get(key, False))

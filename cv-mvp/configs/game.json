@@ -1,0 +1,21 @@
+{
+  "window_ms": 120,
+  "growth_enter": 1.5,
+  "speed_enter": 0.25,
+  "cooldown_ms": 50,
+  "release_fraction": 0.5,
+  "release_ms": 15,
+  "max_gap_ms": 250,
+  "min_handedness_score": 0.6,
+  "head_init_ms": 500,
+  "min_visibility": 0.65,
+  "min_body_width": 0.1,
+  "max_body_width": 0.65,
+  "head_jitter": 0.08,
+  "smoothing_ms": 35,
+  "dodge_enter": 0.24,
+  "dodge_exit": 0.1,
+  "dodge_hold_ms": 65,
+  "rearm_ms": 150,
+  "recalibrate_after_loss_ms": 2000
+}

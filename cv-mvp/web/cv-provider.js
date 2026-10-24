@@ -1,5 +1,6 @@
 /** Framework-free local provider. Imports no camera, model or game dependencies. */
 const types = new Set(['punch_left','punch_right','dodge_left','dodge_right','return_neutral']);
+const punchTypes = new Set(['straight','hook']); // v1.1
 const finite = x => typeof x === 'number' && Number.isFinite(x);
 export function validateSample(s) {
   if (s?.contractVersion !== 1 || s.kind !== 'cv_sample' || !Number.isSafeInteger(s.seq) || s.seq < 1 ||
@@ -17,7 +18,8 @@ export function validateSample(s) {
   }
   return s.events.every(e => e.schemaVersion === 1 && typeof e.eventId === 'string' &&
     e.sessionId === o.sessionId && types.has(e.type) && e.sideConvention === 'player_anatomical' &&
-    finite(e.onsetMs) && finite(e.sampleMs) && finite(e.detectedMs) && e.onsetMs<=e.sampleMs && e.sampleMs<=e.detectedMs);
+    finite(e.onsetMs) && finite(e.sampleMs) && finite(e.detectedMs) && e.onsetMs<=e.sampleMs && e.sampleMs<=e.detectedMs &&
+    (e.punchType === undefined || (e.type.startsWith('punch_') && punchTypes.has(e.punchType))));
 }
 export class CvProvider {
   constructor({url='ws://127.0.0.1:8765',onSample=()=>{},onState=()=>{},onReset=()=>{},

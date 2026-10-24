@@ -12,6 +12,11 @@ def frame(t):
     pose = [pt(0.5, 0.5) for _ in range(33)]
     pose[0] = pt(0.62 if 3.4 < phase < 4.1 else 0.5, 0.25)
     pose[11], pose[12] = pt(0.65, 0.50), pt(0.35, 0.50)
+    # Elbows tucked under the hands in guard (vertical forearms); for the hook at
+    # 4.8s the left elbow swings out to shoulder height (horizontal forearm).
+    hook = phase - 4.8
+    pose[13] = pt(0.86, 0.45) if 0 <= hook < 0.5 else pt(0.66, 0.75)
+    pose[14] = pt(0.34, 0.75)
     hands = []
     for side, center, start, direction in [
         ("Left", 0.65, 1.2, -1),
@@ -21,6 +26,9 @@ def frame(t):
         amount = max(0, min(u, 0.25)) if u < 0.45 else max(0, 0.25 - (u - 0.45))
         size = 0.04 * math.exp(4 * amount)
         x = center + direction * amount * 0.6
+        if side == "Left" and 0 <= hook < 0.9:
+            # Flat left hook: wide, sweeps inward without growing, then eases back.
+            x = 0.75 - 1.25 * min(hook, 0.2) if hook < 0.3 else 0.5 + (hook - 0.3) / 0.6 * 0.15
         points = [pt(x, 0.4) for _ in range(21)]
         for i, dx, dy in [
             (0, 0, 0.8),

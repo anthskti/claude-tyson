@@ -1,6 +1,8 @@
 /** Concrete MVP definitions derived from the team's conceptual proposal. */
 export interface FightStamped { fightId: string; roundId: string }
 export type MotionType = 'punch_left' | 'punch_right' | 'dodge_left' | 'dodge_right' | 'return_neutral';
+/** v1.1: either hand; the side is in MotionType (punch_left / punch_right). */
+export type PunchType = 'straight' | 'hook';
 export type TrackingState = 'calibrating' | 'good' | 'degraded' | 'lost';
 export interface MotionBase {
   confidence: null; // No calibrated classifier confidence exists.
@@ -13,6 +15,7 @@ export interface MotionEvent extends MotionBase {
   onsetMs: number; sampleMs: number; detectedMs: number;
   sideConvention: 'player_anatomical'; calibrationId: string | null;
   experimental: boolean; resetGeneration: number; features: Record<string, unknown>;
+  punchType?: PunchType; // v1.1, only on punch_left / punch_right
 }
 export interface CvObservation extends MotionBase {
   schemaVersion: 1; kind: 'observation'; sessionId: string;

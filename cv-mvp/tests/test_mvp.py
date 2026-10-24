@@ -49,7 +49,12 @@ def test_current_detector_outputs_survive_adapter():
         _, events = native.process(record, t + 25)
         expected += [(e["type"], e["sampleMs"]) for e in events]
         packet = adapter.process(record, t + 25)
-        actual += [(e["type"], e["sampleMs"]) for e in packet["events"]]
+        # v1.1 hook trigger events are additive; core events must pass through intact.
+        actual += [
+            (e["type"], e["sampleMs"])
+            for e in packet["events"]
+            if e["features"].get("rule") != "hook_lateral"
+        ]
     assert actual == expected
     assert {e[0] for e in actual} == {
         "punch_left",
@@ -88,7 +93,7 @@ def test_pose_coalescing_keeps_all_intervening_events_and_times():
         expected.extend(packet["events"])
     sample, first = mail.pop()
     assert sample["seq"] == len(packets) and first == 1
-    assert sample["events"] == expected and len(expected) == 4
+    assert sample["events"] == expected and len(expected) == 5
     assert mail.pop() is None
     message = CvAdapter.envelope(sample, "f", "r", first)
     assert message["batch"]["coalescedObservations"] == len(packets) - 1
@@ -204,3 +209,190 @@ def test_websocket_handshake_clock_context_events_and_clean_shutdown():
         await bridge.close()
 
     asyncio.run(exercise())
+
+
+def typed_events(adapter, start=0, end=12000):
+    return [
+        (e["type"], e["punchType"], e["features"]["rule"])
+        for t in range(start, end, 33)
+        for e in adapter.process(frame(t), t + 25)["events"]
+        if e["type"].startswith("punch_")
+    ]
+
+
+def test_straight_and_hook_types_with_single_hook():
+    from cv_mvp.punch_type import PunchTypeConfig
+
+    events = typed_events(CvAdapter(session_id="types"), end=6000)
+    assert events == [
+        ("punch_left", "straight", "recent_hand_motion"),
+        ("punch_right", "straight", "recent_hand_motion"),
+        ("punch_left", "hook", "hook_lateral"),
+    ]
+    # A stricter elbow angle than the synthetic hook's ~100 degrees turns it off.
+    strict = CvAdapter(punch_config=PunchTypeConfig(hook_elbow_angle=120))
+    assert [e[1] for e in typed_events(strict, end=6000)] == ["straight", "straight"]
+
+
+def test_hook_trigger_can_be_disabled_and_reset_clears_history():
+    from cv_mvp.punch_type import PunchTypeConfig
+
+    off = CvAdapter(punch_config=PunchTypeConfig(hook_trigger=False))
+    assert [e[1] for e in typed_events(off, end=6000)] == ["straight", "straight"]
+    a = CvAdapter()
+    for t in range(4800, 4900, 33):
+        a.process(frame(t), t)
+    a.reset()
+    assert all(not h for h in a.punch_typer.history.values())
+
+
+def arm(raised=None, wrist_out=None):
+    return dict(forearmLength=None, forearmDx=None, forearmAngleDeg=None, elbowOutward=None,
+                elbowRaised=raised, elbowHeight=None if raised is None else (0.0 if raised else -0.8),
+                elbowAngleDeg=None if raised is None else (80.0 if raised else 20.0),
+                upperArmLength=None if raised is None else 0.7, wristX=None,
+                knuckleRatio=None, knuckleDepth=None, wristOutward=wrist_out, wristHeight=None,
+                forearmMissing=None)
+
+
+def typer_with(side, xs, sizes, arm_state, config=None):
+    from cv_mvp.punch_type import PunchTyper
+    from cv_mvp.core.config import Config
+
+    typer = PunchTyper(config, detector_config=Config())
+    typer.scale = 0.3
+    for i, (x, size) in enumerate(zip(xs, sizes)):
+        typer.history[side].append((i * 33, x, size, arm_state))
+    return typer, typer._measure(side, 33 * (len(xs) - 1), 200)
+
+
+def test_hook_needs_raised_elbow_and_outside_in_wrist():
+    sweep = [0.75 - 0.02 * i for i in range(7)]  # left wrist moving inward
+    flat = [0.04] * 7
+    # Raised elbow + wrist wide of the shoulder + inward sweep: hook.
+    typer, m = typer_with("left", sweep, flat, arm(True, 0.3))
+    assert typer._decide(m) == "hook"
+    # Elbow down: straight, no wait. Raised elbow but wrist in front: wait, then straight.
+    typer, m = typer_with("left", sweep, flat, arm(False, 0.3))
+    assert typer._decide(m) == "straight"
+    typer, m = typer_with("left", sweep, flat, arm(True, -0.2))
+    assert typer._decide(m) is None and typer._final(m) == "straight"
+    # Wide + raised but no sweep yet (windup): wait; still no sweep at the end: straight.
+    still = [0.75] * 7
+    typer, m = typer_with("left", still, flat, arm(True, 0.3))
+    assert typer._decide(m) is None and typer._final(m) == "straight"
+    # Elbow never visible: the wrist path decides.
+    typer, m = typer_with("left", sweep, flat, arm(None, 0.3))
+    assert typer._decide(m) == "hook"
+
+
+def test_fitted_model_replaces_rule():
+    from cv_mvp.punch_type import PunchTypeConfig
+
+    model = dict(features=["wristOutward"], mean=[0.5], std=[0.2], weights=[4.0], bias=0.0)
+    cfg = PunchTypeConfig(model=model)
+    sweep, flat = [0.70 - 0.02 * i for i in range(7)], [0.04] * 7
+    typer, m = typer_with("left", sweep, flat, arm(True, 0.9), cfg)
+    assert typer._decide(m) == "hook" and m["hookProbability"] > 0.9
+    typer, m = typer_with("left", sweep, flat, arm(True, 0.1), cfg)
+    assert typer._decide(m) == "straight"
+    typer, m = typer_with("left", sweep, flat, arm(True, 0.52), cfg)
+    assert typer._decide(m) is None
+    with pytest.raises(ValueError):
+        PunchTypeConfig(model=dict(features=["nope"], mean=[0], std=[1], weights=[1], bias=0)).validate()
+
+
+def test_ambiguous_punch_is_held_then_labeled():
+    from cv_mvp.punch_type import PunchTyper
+    from cv_mvp.core.config import Config
+    from cv_mvp.core.detector import Detector
+
+    typer = PunchTyper(detector_config=Config())
+    detector = Detector(session_id="hold")
+    base = dict(arm(True, 0.3), logPalmGrowth=0.1, lateralPathRatio=1, windowSpanMs=200, elbowRaisedAny=True)
+    measures = [dict(base, inwardBodyWidths=0.0, inwardSpeed=-0.5),
+                dict(base, inwardBodyWidths=0.5, inwardSpeed=3.0)]
+    typer._measure = lambda side, t, w: dict(measures[0] if t < 1033 else measures[1])
+    times = iter([1000, 1033])
+    typer._observe = lambda record: (next(times), {"left": {}})
+    event = dict(type="punch_left", sampleMs=1000, features={})
+    assert typer.process({}, [event], detector, None) == []
+    out = typer.process({}, [], detector, None)
+    assert out == [event] and event["punchType"] == "hook"
+    assert event["features"]["punchClass"]["deferredMs"] == 33
+
+
+def test_invalid_punch_config_rejected():
+    from cv_mvp.punch_type import PunchTypeConfig
+
+    for bad in (dict(hook_elbow_angle=0), dict(trigger_speed=0), dict(hook_trigger="yes")):
+        with pytest.raises(ValueError):
+            PunchTypeConfig(**bad).validate()
+
+
+def test_fit_script_learns_forearm_split(tmp_path):
+    import random
+    import subprocess
+    import sys
+    from cv_mvp.punch_type import FEATURES, PunchTypeConfig
+
+    rng = random.Random(4)
+    punches = []
+    # Old jab/cross labels must still count as straights.
+    for label, dx, angle, n in [("jab", 0.2, 65, 15), ("straight", 0.25, 60, 15), ("hook", 0.8, 15, 15)]:
+        for i in range(n):
+            f = {k: rng.gauss(0.3, 0.2) for k in FEATURES}
+            f.update(forearmDx=rng.gauss(dx, 0.1), forearmAngleDeg=rng.gauss(angle, 10), knuckleDepth=None)
+            side = "punch_right" if label == "straight" else "punch_left"
+            punches.append(dict(label=label, type=side, punchType="straight",
+                                features=f, eventId=f"{label}{i}"))
+    data = tmp_path / "labeled.json"
+    data.write_text(json.dumps(dict(version=1, punches=punches)))
+    out = tmp_path / "punch-types.json"
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run([sys.executable, str(root / "scripts/fit_punch_types.py"), str(data), "--out", str(out)],
+                            capture_output=True, text=True, check=True)
+    assert "leave-one-out" in result.stdout and "knuckleDepth" not in json.loads(out.read_text())["model"]["features"]
+    cfg = PunchTypeConfig.load(out)
+    w = dict(zip(cfg.model["features"], cfg.model["weights"]))
+    assert w["forearmDx"] > 0 and w["forearmAngleDeg"] < 0
+    acc = [l for l in result.stdout.splitlines() if "accuracy" in l][-1]
+    assert int(acc.split("=")[1].strip().rstrip("%")) >= 90
+
+
+def test_blurred_fist_is_followed_by_pose_wrist():
+    from cv_mvp.punch_type import PunchTyper
+    from cv_mvp.core.config import Config
+
+    typer = PunchTyper(detector_config=Config())
+    for t in range(1200, 1300, 33):
+        typer._observe(frame(t))
+    before = len(typer.history["left"])
+    blurred = frame(1300)
+    wrist = blurred["hands"][0]["landmarks"][0]
+    blurred["hands"] = []
+    blurred["pose"][15] = dict(wrist, visibility=0.9, presence=0.9)
+    typer._observe(blurred)
+    entry = typer.history["left"][-1]
+    assert len(typer.history["left"]) == before + 1 and entry[2] is None and entry[1] == wrist["x"]
+    lost = frame(1600)
+    lost["hands"] = []
+    for i in (15, 16):
+        lost["pose"][i] = dict(lost["pose"][i], visibility=0.1)
+    typer._observe(lost)
+    assert not typer.history["left"]  # neither model sees it past max_gap_ms
+
+
+def test_game_timing_counts_each_punch_once():
+    from cv_mvp.core.config import Config
+
+    root = Path(__file__).resolve().parents[1]
+    a = CvAdapter(Config.load(root / "configs/game.json"), session_id="game")
+    punches = [
+        (e["type"], e["punchType"])
+        for t in range(0, 12000, 33)
+        for e in a.process(frame(t), t + 25)["events"]
+        if e["type"].startswith("punch_")
+    ]
+    one_loop = [("punch_left", "straight"), ("punch_right", "straight"), ("punch_left", "hook")]
+    assert punches == one_loop * 2

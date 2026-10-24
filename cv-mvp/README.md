@@ -40,7 +40,7 @@ The downloader saves pinned, checksum-verified MediaPipe model files under `mode
 
 Reload the smoke page and connect. Stand far enough back that your head, both shoulders, and hands fit in frame. Hold your head still briefly for dodge initialization. Hand punch detection does not need a saved guard position or punch calibration. `Reset head/history` clears the detector's short hand history and restarts head initialization.
 
-Defaults are **640×480 requested at 30 FPS, pose lite + two hands, parallel pose/hand inference, CPU Tasks VIDEO mode**. Camera drivers can ignore requested properties. Inference throughput and camera FPS are separate; 30 FPS is a target, not a guarantee. The capture slot keeps the newest camera frame instead of accumulating a backlog.
+Defaults are **640×480 requested at 30 FPS, pose lite + two hands, parallel pose/hand inference, CPU Tasks VIDEO mode**. Detector timing comes from `configs/game.json`: the harness defaults with a 50 ms per-hand punch cooldown (harness: 170 ms) and 15 ms release (40 ms). Use `--config configs/default.json` for the original harness timing. Camera drivers can ignore requested properties. Inference throughput and camera FPS are separate; 30 FPS is a target, not a guarantee. The capture slot keeps the newest camera frame instead of accumulating a backlog.
 
 Useful alternatives:
 
@@ -53,6 +53,29 @@ python -m cv_mvp --camera 0 --config configs/tuned-straights.experimental.json
 ```
 
 `--variant` changes the pose model; hand inference stays enabled. A video uses the adjacent `input.avi.timestamps.jsonl` sidecar if present. Preserve it when moving harness recordings. `--replay` expects the harness's raw `kind: "frame"` landmark JSONL, not `cv_sample` packets or `--log` output. Video and synthetic sources are paced by default; `--unpaced` is for offline checks. Use `--input-mirrored` only when the actual input pixels are mirrored; the UI already mirrors its marker display separately.
+
+### Punch types (v1.1)
+
+Punch events carry `punchType`: `straight` or `hook`, for either hand (the hand is in `punch_left` / `punch_right`). Logic: `cv_mvp/punch_type.py`.
+
+- **A hook needs a raised elbow and the wrist sweeping in from near the shoulder line or wider.** Raised = upper arm at least `hook_elbow_angle` (55°) from hanging straight down (90° = level with the shoulder), and at least `min_upper_arm` long on screen so an arm pointing at the camera does not count. Straights keep the elbow down or the wrist in front, so they are labeled the moment they fire. Without a visible elbow the wrist path decides alone.
+- **The core often fires during a hook's windup**, before the sweep, so a punch with a raised elbow or wide wrist waits up to `defer_ms` (150 ms) for it. `features.punchClass.deferredMs` shows the wait.
+- **Fast hooks** blur out of the hand model; the wrist is then followed with the pose model so the sweep is still measured.
+- **Flat hooks** the core growth rule misses fire through a lateral trigger (`rule: "hook_lateral"`) that shares the core per-hand cooldown. Disable with `{"hook_trigger": false}`.
+- Every punch reports its measurements in `features.punchClass`. Uppercuts and blocks are not classified. Change thresholds with `--punch-config`, e.g. `{"hook_elbow_angle": 70}`.
+
+**Tune to a real player.** On the smoke page, pick a label (keys 1 straight, 2 hook, 0 off), throw 10-15 of only that, switch, and repeat; the table shows what you threw vs what was detected. Then download and fit:
+
+```sh
+python scripts/fit_punch_types.py ~/Downloads/labeled-punches-*.json --out configs/punch-types.json
+python -m cv_mvp --camera 0 --punch-config configs/punch-types.json
+```
+
+The script prints the current confusion table, how well each feature separates straights from hooks, and a leave-one-out estimate for the fitted model it writes.
+
+### Camera preview (debug)
+
+`python -m cv_mvp --camera 0 --preview-port 8766` and open <http://127.0.0.1:8766/> for the camera with pose, hand landmarks, shoulder lines (wrist outside = wide), elbow-raised bars, live per-hand hook evidence and flashing event labels. Off by default, loopback only, separate from the game socket (which still never carries frames). Encoding adds a few ms per frame, so leave it off when measuring latency.
 
 ## 3. Connect your frontend
 

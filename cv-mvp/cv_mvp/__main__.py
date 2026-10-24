@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 from .core.config import Config
 from .pipeline import Pipeline
+from .punch_type import PunchTypeConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,7 +19,20 @@ def main():
     src.add_argument("--video", type=Path)
     src.add_argument("--replay", type=Path)
     src.add_argument("--synthetic", action="store_true")
-    p.add_argument("--config", type=Path, default=None)
+    # Game timing: shorter per-hand cooldown/release than the harness default.json.
+    p.add_argument("--config", type=Path, default=ROOT / "configs" / "game.json")
+    p.add_argument(
+        "--punch-config",
+        type=Path,
+        default=None,
+        help="Punch-type JSON (stance, hook thresholds, hook_trigger)",
+    )
+    p.add_argument(
+        "--preview-port",
+        type=int,
+        default=0,
+        help="Serve a local debug view of the camera with landmarks (e.g. 8766); off by default",
+    )
     p.add_argument("--models", type=Path, default=Path("models"))
     p.add_argument("--variant", choices=["lite", "full"], default="lite")
     p.add_argument("--transport", choices=["ws", "jsonl"], default="ws")
@@ -57,6 +71,16 @@ def main():
         p.error("Invalid dimensions, FPS, duration, buffer size or freshness")
     if a.transport == "jsonl" and (not a.fight_id or not a.round_id):
         p.error("JSONL requires frontend-provided --fight-id and --round-id")
+    preview = None
+    if a.preview_port:
+        from .preview import Preview
+
+        preview = Preview(a.preview_port, a.host).start()
+        print(
+            f"CV preview: http://{a.host}:{a.preview_port}/ (local debug view)",
+            file=sys.stderr,
+            flush=True,
+        )
     pipeline = Pipeline(
         Config.load(a.config),
         camera=a.camera,
@@ -71,6 +95,8 @@ def main():
         seconds=a.seconds,
         realtime=not a.unpaced,
         input_mirrored=a.input_mirrored,
+        punch_config=PunchTypeConfig.load(a.punch_config),
+        preview=preview,
     )
     log = a.log.open("x") if a.log else None
     try:

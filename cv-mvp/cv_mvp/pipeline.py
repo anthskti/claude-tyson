@@ -8,6 +8,7 @@ import time
 import uuid
 from .adapter import CvAdapter, EVENT_TYPES
 from .core.config import Config
+from .punch_type import PUNCH_TYPES
 from .synthetic import frame as synthetic_frame
 
 
@@ -27,10 +28,14 @@ class Pipeline:
         fps=30,
         seconds=0,
         realtime=True,
-        input_mirrored=False
+        input_mirrored=False,
+        punch_config=None,
+        preview=None
     ):
         self.config = config or Config()
-        self.adapter = CvAdapter(self.config, session_id=uuid.uuid4().hex[:12])
+        self.adapter = CvAdapter(
+            self.config, session_id=uuid.uuid4().hex[:12], punch_config=punch_config
+        )
         self.camera, self.video, self.replay, self.synthetic = (
             camera,
             video,
@@ -44,6 +49,7 @@ class Pipeline:
             realtime,
             input_mirrored,
         )
+        self.preview = preview  # optional debug MJPEG view, see preview.py
         self.stop = Event()
         self.reset_requested = Event()
         self.reset_lock = Lock()
@@ -85,8 +91,13 @@ class Pipeline:
                 hitDetection=False,
                 punchCalibrationRequired=False,
                 dodgeCalibrationRequired=True,
+                punchTypes=list(PUNCH_TYPES),  # v1.1
             ),
-            detector=dict(name="recent_hand_motion", config=asdict(self.config)),
+            detector=dict(
+                name="recent_hand_motion",
+                config=asdict(self.config),
+                punchTypes=self.adapter.punch_typer.metadata(),
+            ),
             source=(
                 "synthetic"
                 if self.synthetic
@@ -122,6 +133,7 @@ class Pipeline:
                 self.info = self.capture.info
                 capture_started = time.perf_counter()
             while not self.stop.is_set():
+                pixels = None
                 trace = dict(
                     clock="producer_monotonic_ms",
                     inputKind=(
@@ -199,6 +211,8 @@ class Pipeline:
                         trace["detectionEndMs"] - trace["captureReadMs"]
                     )
                 self.processed += 1
+                if self.preview:
+                    self.preview.update(pixels, record, packet, self.adapter.punch_typer)
                 publish(packet)
             self.status = "complete" if not self.stop.is_set() else "stopped"
         except Exception as exc:
@@ -206,6 +220,8 @@ class Pipeline:
             self.status = "error"
             raise
         finally:
+            if self.preview:
+                self.preview.close()
             if self.capture:
                 self.capture.close()
             if inference:
