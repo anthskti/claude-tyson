@@ -24,6 +24,9 @@ Repo: github.com/anthskti/claude-tyson. Do not push without asking Abdullah.
 
 ## Current notes
 
-- The live game uses `SimulatedCvProvider` for keyboard input. `src/game/cv/bridge.ts` connects to the Python CV bridge (`cv-mvp`, ws://127.0.0.1:8765) and presses the same control keys, so the webcam and keyboard share one input path. Blocks are classified client-side from the bridge's head/wrist markers against a pre-match calibration (`src/game/cv/guard.ts`).
+- The live game uses `SimulatedCvProvider` for keyboard input. Camera input (`src/game/cv/input.ts`) presses the same control keys, so the webcam and keyboard share one input path. Blocks are classified client-side from head/wrist markers against a pre-match calibration (`src/game/cv/guard.ts`).
+- Camera input is classified in the browser by default (`src/game/cv/browserCv.ts`): MediaPipe in two workers plus a TypeScript port of the cv-mvp detector (`src/game/cv/local/`). The Python bridge (`cv-mvp`, ws://127.0.0.1:8765, `src/game/cv/bridge.ts`) is the dev/tuning source: `?cvSource=bridge` or `NEXT_PUBLIC_CV_SOURCE=bridge`.
+- The TS detector must match Python frame for frame: after changing either side, regenerate fixtures with `python scripts/export_parity_fixtures.py --out <repo>/src/game/cv/local/fixtures` (cv-mvp branch) and keep `src/game/cv/local/game.json` in step with `cv-mvp/configs/game.json`.
+- `scripts/cv-assets.ts` (run by `dev` and `build`) copies the MediaPipe WASM and models into `public/cv/` (gitignored). `?cvVideo=<url>` plays a clip as the camera; `?cvDelegate=GPU|CPU|mixed` overrides the MediaPipe delegate.
 - The standalone arena uses its own local engine and is for input/animation experiments.
 - `.env.example` contains the local SpacetimeDB host and database settings.
