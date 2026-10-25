@@ -4,12 +4,12 @@ import { buildArena, loadRing } from './scene/ring';
 import { Boxer, PlayerGloves, cornerOf, type AnyPunch } from './scene/boxer';
 import { Arena, RING_COUNT } from './scene/arena';
 import { SimulatedCvProvider } from './cv/simulatedProvider';
-import { CvBridge } from './cv/bridge';
+import { AirPodProvider } from './cv/airpods';
 import { BrowserCv } from './cv/browserCv';
 import type { CvHooks, CvInput } from './cv/input';
 import { CameraFeed } from './cv/cameraFeed';
 import { GuardCalibration, GuardClassifier, type GuardCalibrationData } from './cv/guard';
-import { poseOf, type Body, type CvProvider, type Guard, type Observation, type PoseState } from './cv/contract';
+import { poseOf, type Body, type CvProvider, type MotionEvent, type Guard, type Observation, type PoseState } from './cv/contract';
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView, type RingView } from './net/server';
 import { Hud, type HudState, type InputMode, type RingSummary } from './hud';
@@ -166,9 +166,10 @@ resize();
 const INPUT_KEY = 'claude-tyson.input';
 function savedInput(): InputMode {
   const param = new URLSearchParams(location.search).get('input');
-  if (param === 'camera' || param === 'keyboard') return param;
+  if (param === 'camera' || param === 'keyboard' || param === 'airpods') return param;
   try {
-    return sessionStorage.getItem(INPUT_KEY) === 'camera' ? 'camera' : 'keyboard';
+    const saved = sessionStorage.getItem(INPUT_KEY);
+    return saved === 'camera' || saved === 'airpods' ? saved : 'keyboard';
   } catch {
     return 'keyboard';
   }
@@ -213,6 +214,7 @@ const server = new GameServer({
   onRingAttack: atk => arena.attack(atk),
   onRingAttackResolved: atk => arena.resolved(atk),
   onAttack(atk, v) {
+    if (atk.attackerSlot === v.me.slot) airpods.accepted(atk.cvEventId);
     if (v.match.status !== 'active' || atk.attackerSlot === v.me.slot) return;
     const cueMs = Number(atk.cueAt.microsSinceUnixEpoch / 1000n);
     const impactMs = Number(atk.impactAt.microsSinceUnixEpoch / 1000n);
@@ -222,6 +224,7 @@ const server = new GameServer({
     hud.telegraph(`${PUNCH_NAME[atk.punchType]}${side}`, ANSWER[atk.punchType], impactMs - Date.now());
   },
   onAttackResolved(atk, v) {
+    if (atk.attackerSlot === v.me.slot) airpods.resolved(atk.cvEventId, atk.result);
     if (atk.result === 'cancelled') return;
     if (atk.attackerSlot === v.me.slot) {
       if (v.match.mode === 'bot') opponent.showDefense(atk.defenderBody as Body, atk.defenderGuard);
@@ -269,7 +272,9 @@ const hud = new Hud({
   forfeit: () => view && server.forfeit(view.match.id),
   useKeyboard: () => setInput('keyboard'),
   useCamera: () => setInput('camera'),
+  useAirPods: () => setInput('airpods'),
   reconnectCamera: () => {
+    if (hudState.input === 'airpods') { setInput('airpods'); return; }
     void feed.show();
     cameraInput.reconnect();
   },
@@ -448,7 +453,7 @@ function watchedView(): MatchView | undefined {
 // so everything comes from CV; blocks are classified from the wrist and head markers
 // against a per-player calibration (cv/guard.ts). X still recalibrates.
 const sim = new SimulatedCvProvider();
-const cv: CvProvider = sim;
+let cv: CvProvider = sim;
 const CV_DRIVEN_KEYS = ['j', 'c', 'q', 'e', 'a', 'd', 'b'];
 const KEY_LABEL: Record<string, string> = {
   j: 'J', c: 'C', q: 'Q', e: 'E', a: 'hold A', d: 'hold D', b: 'hold B',
@@ -492,6 +497,10 @@ function renderCalibration() {
 
 /** In camera mode, calibrate stance and block before the match or queue starts. */
 function beforeFight(action: () => void) {
+  if (hudState.input === 'airpods') {
+    if (!airpods.ready) { hud.toast('Complete rest → straight → hook for each hand in the local harness, and keep your head in frame.', 'info'); return; }
+    return action();
+  }
   if (hudState.input !== 'camera') return action();
   afterCalibration = action;
   calibration = new GuardCalibration({
@@ -517,12 +526,7 @@ function endCalibration(run: boolean) {
   renderCalibration();
   if (run) action?.();
 }
-// Camera classification runs in the browser by default (cv/browserCv.ts). The Python CV
-// bridge is the dev and tuning source: NEXT_PUBLIC_CV_SOURCE=bridge, `?cvSource=bridge`, or
-// `?cvBridge=ws://127.0.0.1:8799` (a different bridge, e.g. a synthetic one) picks it.
-const params = new URLSearchParams(location.search);
-const bridgeUrl = params.get('cvBridge') ?? undefined;
-const sourceKind = params.get('cvSource') ?? (bridgeUrl ? 'bridge' : process.env.NEXT_PUBLIC_CV_SOURCE ?? 'browser');
+// Camera-only remains the current browser Pose + Hands pipeline.
 const cameraHooks: CvHooks = {
   onStatus(status, detail) {
     if (status === 'connected' && hudState.camera !== 'connected') hud.toast('camera tracking on', 'good');
@@ -552,35 +556,68 @@ const cameraHooks: CvHooks = {
     refresh();
   },
 };
-const cameraInput: CvInput = sourceKind === 'bridge' ? new CvBridge(sim, cameraHooks, bridgeUrl) : new BrowserCv(sim, cameraHooks, feed);
+const cameraInput: CvInput = new BrowserCv(sim, cameraHooks, feed);
 hudState.cameraSource = cameraInput.kind;
+function consumeMotionToken(): string | undefined {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const supplied = fragment.get('motionToken');
+  const key = 'motion-pairing-token';
+  if (supplied) {
+    fragment.delete('motionToken');
+    history.replaceState(null, '', location.pathname + location.search + (fragment.size ? '#'+fragment.toString() : ''));
+    if (!/^[A-Za-z0-9_-]{32,128}$/.test(supplied)) return;
+    try { sessionStorage.setItem(key, supplied); } catch { /* memory-only pairing */ }
+    return supplied;
+  }
+  try { return sessionStorage.getItem(key) ?? undefined; } catch { return; }
+}
+const airpods = new AirPodProvider({
+  status(status, detail) {
+    if (hudState.input !== 'airpods') return;
+    hudState.camera = status;
+    hudState.cameraDetail = detail;
+    markDirty();
+  },
+  changed() {
+    hudState.motionSummary = airpods.summary;
+    markDirty();
+  },
+}, new URLSearchParams(location.search).get('motionBridge') ?? 'ws://127.0.0.1:8765', consumeMotionToken());
+let cameraStartTimer: ReturnType<typeof setTimeout> | undefined;
 
 function setInput(mode: InputMode) {
+  clearTimeout(cameraStartTimer);
+  cameraInput.stop();
+  feed.hide();
+  endCalibration(false);
+  setCvGuards({ left: 'neutral', right: 'neutral' });
+  cv.stop();
   hudState.input = mode;
-  try {
-    sessionStorage.setItem(INPUT_KEY, mode);
-  } catch {
-    // Storage blocked: the choice just won't survive a reload.
-  }
+  try { sessionStorage.setItem(INPUT_KEY, mode); } catch { /* tab-local only */ }
   for (const k of CV_DRIVEN_KEYS) {
     sim.release(k);
-    if (mode === 'camera') sim.blockedKeys.add(k);
+    if (mode !== 'keyboard') sim.blockedKeys.add(k);
     else sim.blockedKeys.delete(k);
   }
-  cameraInput.stop();
-  setCvGuards({ left: 'neutral', right: 'neutral' });
   hudState.camera = 'off';
   hudState.lastCv = undefined;
+  hudState.cameraStats = undefined;
+  hudState.cameraSource = 'browser';
+  latest = undefined;
+  myPose = { body: 'neutral', guards: { left: 'neutral', right: 'neutral' } };
+  cv = mode === 'airpods' ? airpods : sim;
+  cv.start(onInput);
   if (mode === 'camera') {
-    void feed.show();
-    cameraInput.start();
-  } else {
-    feed.hide();
-    endCalibration(false);
+    // Give the native pose worker time to close the camera after its WS disconnect.
+    cameraStartTimer = setTimeout(() => {
+      if (hudState.input !== 'camera' || !alive) return;
+      void feed.show(); cameraInput.start();
+    }, 250);
   }
   refresh();
 }
-cv.start((obs, events) => {
+
+function onInput(obs: Observation, events: MotionEvent[]) {
   const trackingChanged = obs.trackingState !== hudState.tracking;
   latest = obs;
   hudState.tracking = obs.trackingState;
@@ -588,8 +625,13 @@ cv.start((obs, events) => {
 
   myPose = poseOf(obs);
   hudState.pose = myPose;
-  gloves.setMarker('left', obs.validity.punch_left ? obs.markers.left : undefined);
-  gloves.setMarker('right', obs.validity.punch_right ? obs.markers.right : undefined);
+  if (hudState.input === 'airpods') {
+    gloves.setControllerHand('left', obs.validity.punch_left);
+    gloves.setControllerHand('right', obs.validity.punch_right);
+  } else {
+    gloves.setMarker('left', obs.validity.punch_left ? obs.markers.left : undefined);
+    gloves.setMarker('right', obs.validity.punch_right ? obs.markers.right : undefined);
+  }
   gloves.setGuard('left', myPose.guards.left);
   gloves.setGuard('right', myPose.guards.right);
   // Animate locally right away; the server decides whether it lands.
@@ -600,9 +642,16 @@ cv.start((obs, events) => {
   }
   hud.renderPose(myPose, view?.match.status === 'active');
 
-  if (view?.match.status === 'active') server.forwardCv(view.match.id, obs, events);
+  if (hudState.input === 'airpods' && events.length) {
+    hudState.lastCv = events.map(e => e.punchType ?? e.type).join(', ');
+    markDirty();
+  }
+  if (view?.match.status === 'active') {
+    const sent = server.forwardCv(view.match.id, obs, events);
+    if (hudState.input === 'airpods') airpods.submitted(sent);
+  }
   if (trackingChanged) refresh();
-});
+}
 
 setInput(hudState.input);
 server.connect();
@@ -647,6 +696,7 @@ renderer.setAnimationLoop(() => {
     }
     hud.tick(watchedView());
     renderer.render(scene, camera);
+    if (hudState.input === 'airpods') airpods.frameRendered(false);
     return;
   }
   camera.rotation.y = 0;
@@ -688,6 +738,7 @@ renderer.setAnimationLoop(() => {
 
   hud.tick(view);
   renderer.render(scene, camera);
+  if (hudState.input === 'airpods') airpods.frameRendered();
 });
 
 // Backtick toggles AI transparency log
@@ -697,6 +748,7 @@ return () => {
   alive = false;
   renderer.setAnimationLoop(null);
   window.removeEventListener('resize', resize);
+  clearTimeout(cameraStartTimer);
   cameraInput.stop();
   feed.hide();
   cornerScene.exit();

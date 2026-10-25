@@ -3,13 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun scripts/cv-assets.ts && bun --bun next dev --port 3001",
-    "build": "bun scripts/cv-assets.ts && bun --bun next build",
+    "dev": "bun scripts/cv-assets.ts && bun scripts/package-motion.ts && bun --bun next dev --port 3001",
+    "build": "bun scripts/cv-assets.ts && bun scripts/package-motion.ts && node node_modules/next/dist/bin/next build",
     "start": "bun --bun next start --port 3001",
     "test": "bun test engine input src/game/cv && cd spacetimedb && npx vitest run",
     "sync": "./sync-engine.sh",
     "arena": "bun dev/server.ts",
-    "build:arena": "bun dev/build-arena.ts"
+    "build:arena": "bun dev/build-arena.ts",
+    "test:motion": "cd motion && .venv/bin/python -m pytest -q tests",
+    "package:motion": "bun scripts/package-motion.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.21",

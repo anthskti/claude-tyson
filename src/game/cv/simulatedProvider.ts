@@ -100,6 +100,14 @@ export class SimulatedCvProvider implements CvProvider {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
     clearInterval(this.timer);
+    this.held.clear();
+    this.ignoreUntilRelease.clear();
+    this.pending = [];
+    this.activeDefense = null;
+    this.actionReadyAt = 0;
+    this.dodgeSide = null;
+    this.lateral = 0;
+    this.punchUntil = { left: 0, right: 0 };
   }
 
   /** Press a control key. The keyboard and the CV bridge (cv/bridge.ts) both drive input through here. */

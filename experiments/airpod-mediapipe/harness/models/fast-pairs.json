@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "mode": "airpod-stateful-fast",
+  "demoOnly": true,
+  "models": [
+    {
+      "earbud": "left",
+      "punchingHand": "left",
+      "bundle": "airpod-left-fast-v1",
+      "weightsSha256": "748e2d2cfa3b215e742d52801e6cb7d1b2d4f9219518d7c478600b7f86486496",
+      "datasetFingerprint": "5e8079c0ac98b1f55f3d7cd874bba13b50b469f8e4b6f6547278db5380000b77"
+    },
+    {
+      "earbud": "right",
+      "punchingHand": "right",
+      "bundle": "airpod-right-fast-v1",
+      "weightsSha256": "e609ff929f8bb6f6bcb1e1307f3ae5bdd5b2d500dfe1404305ae1f476c23641a",
+      "datasetFingerprint": "81636343d118220ac02c557b711d7701c9aada92c449f1592010b3bfd1205a53"
+    }
+  ]
+}

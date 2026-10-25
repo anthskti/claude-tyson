@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+harness/runs/
+harness/collectors/runs/
+harness/collectors/build/
+harness/collectors/iphone/build/
+xcuserdata/
+*.xcuserstate
+*.ipa
+*.mobileprovision

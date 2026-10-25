@@ -307,12 +307,13 @@ export class GameServer {
 
   /** Forward one CV sample. Pose is throttled; events are never dropped or merged. */
   forwardCv(matchId: bigint, obs: Observation, events: MotionEvent[]) {
-    if (!this.conn) return;
+    if (!this.conn) return [];
+    const submitted: MotionEvent[] = [];
     const now = performance.now();
     const pose = poseOf(obs);
     // Send immediately when the discrete state changes so a dodge/block isn't late.
-    const poseKey = `${obs.trackingState}|${pose.body}|${pose.guards.left}|${pose.guards.right}`;
-    if (now - this.lastPoseSent >= POSE_SEND_INTERVAL_MS || poseKey !== this.lastPoseKey) {
+    const poseKey = `${matchId}|${obs.sessionId}|${obs.calibrationId}|${obs.trackingState}|${obs.validity.dodge}|${obs.validity.punch_left}|${obs.validity.punch_right}|${pose.body}|${pose.guards.left}|${pose.guards.right}`;
+    if (now - this.lastPoseSent >= POSE_SEND_INTERVAL_MS || poseKey !== this.lastPoseKey || events.length > 0) {
       this.lastPoseSent = now;
       this.lastPoseKey = poseKey;
       this.conn.reducers
@@ -334,11 +335,15 @@ export class GameServer {
     for (const ev of events) {
       const key = `${ev.sessionId}:${ev.eventId}`;
       if (this.forwarded.has(key)) continue;
+      if (ev.sessionId !== obs.sessionId) continue;
       this.forwarded.add(key);
+      if (this.forwarded.size > 4096) this.forwarded.delete(this.forwarded.values().next().value!);
+      submitted.push(ev);
       this.conn.reducers
         .submitMotionEvent({ matchId, cvSessionId: ev.sessionId, eventId: ev.eventId, eventType: ev.type, punchType: ev.punchType ?? '' })
         .catch(this.report);
     }
+    return submitted;
   }
 
   close() {
