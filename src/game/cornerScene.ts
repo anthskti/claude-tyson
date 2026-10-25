@@ -9,9 +9,9 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { DbConnection } from "./module_bindings";
 import type { AnalysisRequest, FightWindowSummary } from "../../coach/analysis";
 
-// ── Camera target: inside ring looking toward corner coach ──────────────
-const CORNER_CAM_POS  = new THREE.Vector3(1.6, 1.55, 1.6);   // inside ring, near player corner
-const CORNER_CAM_LOOK = new THREE.Vector3(3.6,  1.1,  3.6);  // looking at crab/placeholder head
+// ── Camera target: side angle from south — crab fills frame ─────────────
+const CORNER_CAM_POS  = new THREE.Vector3(3.8, 1.9,  0.8);   // south of crab, elevated
+const CORNER_CAM_LOOK = new THREE.Vector3(3.5, 1.05, 3.5);   // crab midsection/face
 
 // ── Claude placeholder: outside the near-right (blue) ring corner ────────
 const CLAUDE_PLACEHOLDER_POS = new THREE.Vector3(3.6, 0.0, 3.6);

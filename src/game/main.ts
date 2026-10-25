@@ -635,7 +635,9 @@ renderer.setAnimationLoop(() => {
   const fp = isFirstPerson();
   firstPerson.visible = fp;
   gloves.root.visible = fp;
-  arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
+  // During corner scene cinematic, show the ring model (camera has moved away from inside it).
+  const hideRing = fp && !cinematicMode;
+  arena.setFocus(fp ? view!.match.ring : hudState.watch, hideRing, fp && view!.me.slot === 1);
   arena.update(dt, Date.now());
   if (!fp) {
     if (hudState.spectating) {
