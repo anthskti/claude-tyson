@@ -17,6 +17,21 @@ export interface HudActions {
   reconnectCamera(): void;
   cancelCalibration(): void;
   skipCalibration(): void;
+  spectate(): void;
+  leaveSpectate(): void;
+  watchPrev(): void;
+  watchNext(): void;
+  /** Buttons with data-ring call this instead of their data-action. */
+  watch(ring: number): void;
+}
+
+/** One line per ring for the menu and the spectator bar. */
+export interface RingSummary {
+  ring: number;
+  /** Free for a new fight: empty, or only bots filling time. */
+  free: boolean;
+  label: string; // 'PvP', 'vs bot', 'Exhibition', 'Empty'
+  fighters?: string; // 'ALICE 72 · 55 BOB'
 }
 
 export type InputMode = 'keyboard' | 'camera';
@@ -38,6 +53,13 @@ export interface HudState {
   cameraStats?: CvStats;
   /** Last CV event and the key it mapped to, e.g. "punch_left hook → U". */
   lastCv?: string;
+  rings: RingSummary[];
+  queueLength: number;
+  /** Watching the arena instead of the menu; `watch` is the ring in view. */
+  spectating: boolean;
+  watch: number;
+  /** Names over the health bars: mine and my opponent's, or red and blue when watching. */
+  names: [string, string];
 }
 
 const el = (id: string) => document.getElementById(id)!;
@@ -51,12 +73,13 @@ export class Hud {
     this.actions = actions;
     this.root.innerHTML = `
       <div class="bars">
-        <div class="bar me"><span class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div><div class="track stamina"><div id="stamina-me" class="fill"></div></div></div>
+        <div class="bar me"><span id="me-name" class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div><div class="track stamina"><div id="stamina-me" class="fill"></div></div></div>
         <div id="timer" class="timer">3:00</div>
         <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div><div class="track stamina"><div id="stamina-opp" class="fill"></div></div></div>
       </div>
       <div id="status" class="status"></div>
       <div id="menu" class="menu"></div>
+      <div id="spectate" class="spectate"></div>
       <div id="adapt" class="adapt"></div>
       <div id="pause" class="pause"></div>
       <div id="calibration" class="calibration"></div>
@@ -73,9 +96,20 @@ export class Hud {
   }
 
   private onClick = (e: MouseEvent) => {
-    const action = (e.target as HTMLElement).dataset.action as keyof HudActions | undefined;
+    const data = (e.target as HTMLElement).dataset;
+    if (data.ring !== undefined) return this.actions.watch(Number(data.ring));
+    const action = data.action as Exclude<keyof HudActions, 'watch'> | undefined;
     if (action) this.actions[action]();
   };
+
+  // innerHTML is only replaced when it changes: server updates from every ring arrive
+  // many times a second, and rebuilding buttons that often swallows clicks.
+  private html = new Map<string, string>();
+  private setHtml(id: string, html: string) {
+    if (this.html.get(id) === html) return;
+    this.html.set(id, html);
+    el(id).innerHTML = html;
+  }
 
   dispose() {
     this.root.removeEventListener('click', this.onClick);
@@ -85,16 +119,22 @@ export class Hud {
   render(s: HudState) {
     const active = s.view?.match.status === 'active';
 
-    el('status').innerHTML = `
+    this.setHtml('status', `
       <span class="chip ${s.server}">server: ${s.server}</span>
       <span class="chip ${s.tracking === 'good' ? 'online' : 'warn'}">cv: ${s.tracking}</span>
-      ${this.inputChips(s)}`;
+      ${this.inputChips(s)}`);
 
-    el('opp-name').textContent = s.view?.match.mode === 'bot' ? `BOT` : 'OPPONENT';
+    el('me-name').textContent = s.names[0];
+    el('opp-name').textContent = s.names[1];
 
     const menu = el('menu');
-    menu.style.display = active ? 'none' : 'flex';
-    if (!active) menu.innerHTML = this.menuHtml(s);
+    const showMenu = !active && !s.spectating;
+    menu.style.display = showMenu ? 'flex' : 'none';
+    if (showMenu) this.setHtml('menu', this.menuHtml(s));
+
+    const spectate = el('spectate');
+    spectate.style.display = s.spectating && !active ? 'flex' : 'none';
+    if (s.spectating && !active) this.setHtml('spectate', this.spectateHtml(s));
 
     const adapt = el('adapt');
     const strat = s.view?.strategy;
@@ -145,6 +185,7 @@ export class Hud {
 
   private menuHtml(s: HudState): string {
     const offline = s.server !== 'online';
+    const full = !s.rings.some(r => r.free);
     let resultHtml = '';
     if (s.view && s.result) {
       const w = s.result.winnerSlot;
@@ -165,16 +206,38 @@ export class Hud {
       ${resultHtml}
       ${this.inputPicker(s)}
       <div class="buttons">
-        <button data-action="fightBot" ${offline ? 'disabled' : ''}>Fight adaptive bot</button>
+        <button data-action="fightBot" ${offline || full ? 'disabled' : ''} ${full ? 'title="Every ring is taken. Spectate, or queue for PvP."' : ''}>Fight adaptive bot</button>
         ${s.queued
-          ? `<button data-action="cancelPvp" class="secondary">Waiting for opponent… cancel</button>`
+          ? `<button data-action="cancelPvp" class="secondary">${full ? 'Waiting for a free ring' : 'Waiting for opponent'}… cancel</button>`
           : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP match</button>`}
+        <button data-action="spectate" class="secondary" ${offline ? 'disabled' : ''}>Spectate</button>
       </div>
-      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module. You can still shadowbox.</div>` : ''}
+      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module. You can still shadowbox.</div>` : this.ringsHtml(s, full)}
       ${RULES_HTML}
       ${profileHtml}`;
   }
 
+  private ringsHtml(s: HudState, full: boolean): string {
+    const used = s.rings.filter(r => !r.free).length;
+    const queue = s.queueLength > 0 ? ` · ${s.queueLength} in the PvP queue` : '';
+    const note = full ? '<div class="dim">Every ring is taken. Queue for PvP and you will be matched as soon as one frees up, or spectate meanwhile.</div>' : '';
+    const rows = s.rings.map(r => `<button class="ring-row ${r.free ? 'free' : ''}" data-ring="${r.ring}">
+        <b>Ring ${r.ring + 1}</b> ${r.label}${r.fighters ? ` · ${escapeHtml(r.fighters)}` : ''}</button>`).join('');
+    return `<div class="rings"><div class="dim">${used} of ${s.rings.length} rings in use${queue}</div>
+      <div class="ring-list">${rows}</div>${note}</div>`;
+  }
+
+  private spectateHtml(s: HudState): string {
+    const r = s.rings[s.watch];
+    const queued = s.queued ? `<span class="chip warn">in PvP queue · you join as soon as a ring frees</span>` : '';
+    return `<button data-action="watchPrev" class="secondary" title="Previous ring">◀</button>
+      <div class="what"><b>Ring ${(r?.ring ?? 0) + 1}</b> · ${r?.label ?? 'Empty'}${r?.fighters ? ` · ${escapeHtml(r.fighters)}` : ''}</div>
+      <button data-action="watchNext" class="secondary" title="Next ring">▶</button>
+      ${queued}
+      <button data-action="leaveSpectate">Menu</button>`;
+  }
+
+  /** Pass the watched ring as a MatchView (red as `me`) while spectating. */
   tick(view: MatchView | undefined) {
     const active = view?.match.status === 'active';
     el('hp-me').style.width = `${view ? Math.max(0, view.me.health / 10) : 100}%`;

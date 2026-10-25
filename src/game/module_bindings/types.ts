@@ -10,6 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ArenaTimer = __t.object("ArenaTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type ArenaTimer = __Infer<typeof ArenaTimer>;
+
 export const Attack = __t.object("Attack", {
   id: __t.u64(),
   matchId: __t.u64(),
@@ -60,12 +66,20 @@ export const BotTick = __t.object("BotTick", {
 });
 export type BotTick = __Infer<typeof BotTick>;
 
+export const ExhibitionCleanup = __t.object("ExhibitionCleanup", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  matchId: __t.u64(),
+});
+export type ExhibitionCleanup = __Infer<typeof ExhibitionCleanup>;
+
 export const FightMatch = __t.object("FightMatch", {
   id: __t.u64(),
   mode: __t.string(),
   status: __t.string(),
   startedAt: __t.timestamp(),
   endsAt: __t.timestamp(),
+  ring: __t.u8(),
 });
 export type FightMatch = __Infer<typeof FightMatch>;
 

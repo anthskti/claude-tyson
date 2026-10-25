@@ -80,7 +80,8 @@ export function buildPlaceholderRing(): THREE.Group {
 
 export function buildArena(scene: THREE.Scene) {
   scene.background = new THREE.Color(0x07080c);
-  scene.fog = new THREE.Fog(0x07080c, 8, 30);
+  // Far enough to make out the neighbouring rings (arena.ts), close enough to hide the floor's edge.
+  scene.fog = new THREE.Fog(0x07080c, 12, 48);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(80, 80),
@@ -138,7 +139,15 @@ function canvasTopY(root: THREE.Object3D): number | null {
   return top;
 }
 
-export async function loadRing(url = '/boxing_ring.glb'): Promise<THREE.Object3D> {
+let ringAsset: Promise<THREE.Object3D> | undefined;
+
+/** A copy of the ring; every ring in the arena shares one load and its geometry. */
+export async function loadRing(): Promise<THREE.Object3D> {
+  ringAsset ??= loadRingModel('/boxing_ring.glb');
+  return (await ringAsset).clone();
+}
+
+async function loadRingModel(url: string): Promise<THREE.Object3D> {
   try {
     const gltf = await new GLTFLoader().loadAsync(url);
     gltf.scene.traverse(o => {
