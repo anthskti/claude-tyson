@@ -117,7 +117,8 @@ The server creates bot attacks and resolves them through the same punch and dama
 as player attacks. Bot defense is selected at attack impact. Strategy updates are accepted
 only for the current revision and a fight window belonging to that match; values are
 clamped server-side. Aggression is `[0, 1]`, punch interval is 600–4000 ms, punch weights
-are individually clamped to `[0, 1]`, left bias is `[0, 1]`, defense rate is `[0, 0.8]`,
+are individually clamped to `[0, 1]`, left bias is `[-1, 1]` (`-1` right, `0` balanced,
+`+1` left), defense rate is `[0, 0.8]`,
 and telegraph time is 350–1200 ms. Text explanation is limited to 500 characters.
 
 The strategy/schema still carries an `uppercutWeight` field for compatibility, but the

@@ -42,7 +42,6 @@ class RingStage {
   private bots: [boolean, boolean] = [true, true];
 
   constructor() {
-    void loadRing().then(ring => this.root.add(ring));
     this.light.position.set(0, 9, 0);
     this.root.add(this.light, this.light.target, ...this.boxers.map(b => b.root));
   }
@@ -100,30 +99,36 @@ export class Arena {
   private turned = false;
 
   constructor() {
+    this.root.visible = false;
     for (let i = 0; i < RING_COUNT; i++) {
       const stage = new RingStage();
       this.stages.push(stage);
       this.root.add(stage.root);
     }
-    this.setFocus(0, false);
+    // Share the asset load and reveal all four ring copies in the same frame.
+    void Promise.all(this.stages.map(() => loadRing())).then(rings => {
+      rings.forEach((ring, i) => this.stages[i].root.add(ring));
+      this.root.visible = true;
+    });
+    this.setFocus(null, false);
   }
 
   /**
-   * Centre the arena on `ring`. `hide` hands that ring to the first-person scene;
-   * `turned` shows it from the blue corner.
+   * Centre on a ring for spectating or fighting. Null keeps the shared grid origin
+   * between the four rings for the lobby camera.
    */
-  setFocus(ring: number, hide: boolean, turned = false) {
+  setFocus(ring: number | null, hide: boolean, turned = false) {
     if (ring === this.focus && hide === this.hideFocus && turned === this.turned) return;
     this.focus = ring;
     this.hideFocus = hide;
     this.turned = turned;
     this.root.rotation.y = turned ? Math.PI : 0;
-    const origin = gridPosition(ring);
+    const origin = ring === null ? new THREE.Vector3() : gridPosition(ring);
     this.stages.forEach((stage, i) => {
       stage.root.position.copy(gridPosition(i)).sub(origin);
       stage.root.visible = !(hide && i === ring);
       // The main key light already covers the ring at the origin.
-      stage.light.visible = i !== ring;
+      stage.light.visible = ring === null || i !== ring;
     });
   }
 

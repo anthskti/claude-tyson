@@ -65,7 +65,7 @@ const BOT_DEFAULTS = {
   straightWeight: 0.25,
   hookWeight: 0.2,
   uppercutWeight: 0,
-  leftBias: 0.5,
+  leftBias: 0,
   defenseRate: 0.3,
   telegraphMs: 650,
 };
@@ -528,7 +528,7 @@ function freeRings(ctx: Ctx): number[] {
   return Array.from({ length: RING_COUNT }, (_, ring) => ring).filter(ring => !used.has(ring));
 }
 
-/** The lowest free ring for a real fight. With none free, the exhibition gives up its ring. */
+/** The lowest free ring for a real fight. Otherwise an exhibition gives up its ring. */
 function claimRing(ctx: Ctx): number | undefined {
   const free = freeRings(ctx);
   if (free.length > 0) return free[0];
@@ -1069,22 +1069,23 @@ export const endRound = spacetimedb.reducer(
   }
 );
 
-// Keeps the arena alive: a bot exhibition in a spare ring while someone is online to
-// watch, plus queue pairing as a backstop.
+// Keeps each spare ring alive with an exhibition while someone is online to watch.
+// All available rings start in the same transaction; each match owns its own timers.
 export const arenaTick = spacetimedb.reducer(
   { onSchedule: arenaTimer },
   { timer: arenaTimer.rowType },
   ctx => {
     pairQueue(ctx);
-    if (activeMatches(ctx).some(m => m.mode === 'exhibition')) return;
-    // Let the last exhibition's result show before the next one starts.
-    if ([...ctx.db.exhibitionCleanup.iter()].length > 0) return;
     // Players queued for PvP get the last ring before the bots do.
-    const free = freeRings(ctx);
-    if (free.length === 0 || [...ctx.db.queueEntry.iter()].length > 0) return;
+    if ([...ctx.db.queueEntry.iter()].length > 0) return;
     if (![...ctx.db.player.iter()].some(p => p.online)) return;
-    // The highest free ring, so real fights fill from the first ring up.
-    createMatch(ctx, 'exhibition', free[free.length - 1], undefined, undefined);
+    // Keep a finished exhibition visible until its per-match cleanup expires.
+    const cooling = new Set([...ctx.db.exhibitionCleanup.iter()]
+      .map(row => ctx.db.fightMatch.id.find(row.matchId)?.ring)
+      .filter((ring): ring is number => ring !== undefined));
+    for (const ring of freeRings(ctx)) {
+      if (!cooling.has(ring)) createMatch(ctx, 'exhibition', ring, undefined, undefined);
+    }
   }
 );
 
@@ -1133,7 +1134,7 @@ export const botAct = spacetimedb.reducer(
     const s = ctx.db.botStrategy.matchId.find(match.id)!;
     const counter = !isPast(ctx, bot.counterUntil);
     // Counters are fast straight shots; otherwise follow the strategy's punch mix.
-    const hand: Hand = ctx.random() < s.leftBias ? 'left' : 'right';
+    const hand: Hand = ctx.random() < (s.leftBias + 1) / 2 ? 'left' : 'right';
     const refreshedBot = refreshStamina(ctx, bot);
     const type: PunchType = counter
       ? (hand === 'left' ? 'left_straight' : 'right_straight')
@@ -1179,8 +1180,8 @@ export const closeWindow = spacetimedb.reducer(
       endAt: ctx.timestamp,
       strategyRevision: strat?.revision ?? 0,
       playerJabs: count(mine, a => a.punchType === 'jab'),
-      playerStraights: count(mine, a => a.punchType === 'straight'),
-      playerHooks: count(mine, a => a.punchType === 'hook'),
+      playerStraights: count(mine, a => a.punchType.endsWith('_straight')),
+      playerHooks: count(mine, a => a.punchType.endsWith('_hook')),
       playerUppercuts: count(mine, a => a.punchType === 'uppercut'),
       playerUnclassified: count(mine, a => a.punchType === 'unclassified'),
       playerLeftAttempts: count(mine, a => a.hand === 'left'),
@@ -1225,11 +1226,17 @@ export const applyStrategyUpdate = spacetimedb.reducer(
   },
   (ctx, args) => {
     requireMyFighter(ctx, args.matchId);
+    const match = ctx.db.fightMatch.id.find(args.matchId);
+    if (!match || match.mode !== 'bot' || match.status !== 'active') throw new SenderError('not an active bot match');
     const s = ctx.db.botStrategy.matchId.find(args.matchId);
     if (!s) throw new SenderError('not a bot match');
     if (args.baseRevision !== s.revision) throw new SenderError('stale strategy revision');
     const win = ctx.db.fightWindow.id.find(args.sourceWindowId);
-    if (!win || win.matchId !== args.matchId) throw new SenderError('unknown source window');
+    if (!win || win.matchId !== args.matchId || win.id <= s.sourceWindowId) throw new SenderError('stale source window');
+    if ([args.aggression, args.jabWeight, args.straightWeight, args.hookWeight,
+      args.uppercutWeight, args.leftBias, args.defenseRate].some(v => !Number.isFinite(v))) {
+      throw new SenderError('invalid strategy value');
+    }
 
     const w = [args.jabWeight, args.straightWeight, args.hookWeight, args.uppercutWeight].map(v => clamp(v, 0, 1));
     const mix = w.some(v => v > 0) ? w : [BOT_DEFAULTS.jabWeight, BOT_DEFAULTS.straightWeight, BOT_DEFAULTS.hookWeight, BOT_DEFAULTS.uppercutWeight];
@@ -1244,7 +1251,7 @@ export const applyStrategyUpdate = spacetimedb.reducer(
       straightWeight: mix[1],
       hookWeight: mix[2],
       uppercutWeight: mix[3],
-      leftBias: clamp(args.leftBias, 0, 1),
+      leftBias: clamp(args.leftBias, -1, 1),
       defenseRate: clamp(args.defenseRate, 0, 0.8),
       telegraphMs: clamp(args.telegraphMs, 350, 1200),
       explanation: args.explanation.slice(0, 500),

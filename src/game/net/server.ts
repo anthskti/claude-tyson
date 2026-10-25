@@ -20,6 +20,7 @@ export type MatchRow = ReturnType<Conn['db']['fightMatch']['iter']> extends Iter
 export type StrategyRow = ReturnType<Conn['db']['botStrategy']['iter']> extends Iterable<infer R> ? R : never;
 export type ResultRow = ReturnType<Conn['db']['fightResult']['iter']> extends Iterable<infer R> ? R : never;
 export type ProfileRow = ReturnType<Conn['db']['fighterProfile']['iter']> extends Iterable<infer R> ? R : never;
+export type FightWindowRow = ReturnType<Conn['db']['fightWindow']['iter']> extends Iterable<infer R> ? R : never;
 
 export interface MatchView {
   match: MatchRow;
@@ -44,6 +45,7 @@ export interface ServerEvents {
   onRingAttackResolved(attack: AttackRow): void;
   onError(message: string): void;
   onChange(): void;
+  onFightWindow(window: FightWindowRow): void;
 }
 
 export function tokenKey(): string {
@@ -144,6 +146,7 @@ export class GameServer {
     conn.db.fightResult.onUpdate(changed);
     conn.db.fighterProfile.onUpdate(changed);
     conn.db.fighterProfile.onInsert(changed);
+    conn.db.fightWindow.onInsert((_ctx, window) => this.events.onFightWindow(window));
 
     conn.db.attack.onInsert((_ctx, atk) => {
       this.events.onRingAttack(atk);
@@ -169,6 +172,7 @@ export class GameServer {
         tables.fighter.where(f => f.matchId.eq(matchId)),
         tables.attack.where(a => a.matchId.eq(matchId)),
         tables.botStrategy.where(s => s.matchId.eq(matchId)),
+        tables.fightWindow.where(w => w.matchId.eq(matchId)),
         tables.fightResult.where(r => r.matchId.eq(matchId)),
       ]);
     this.mine = { matchId, handle };
@@ -257,6 +261,27 @@ export class GameServer {
 
   forfeit(matchId: bigint) {
     this.conn?.reducers.forfeit({ matchId }).catch(this.report);
+  }
+
+  windows(matchId: bigint): FightWindowRow[] {
+    return this.conn ? [...this.conn.db.fightWindow.matchId.filter(matchId)].sort((a, b) => Number(a.id - b.id)) : [];
+  }
+
+  attacks(matchId: bigint): AttackRow[] {
+    return this.conn ? [...this.conn.db.attack.matchId.filter(matchId)] : [];
+  }
+
+  applyStrategyUpdate(matchId: bigint, sourceWindowId: bigint, baseRevision: number, patch: {
+    aggression: number; punchIntervalMs: number; jabWeight: number; straightWeight: number;
+    hookWeight: number; leftBias: number; defenseRate: number; telegraphMs: number; explanation: string;
+  }): Promise<unknown> {
+    return this.conn?.reducers.applyStrategyUpdate({
+      matchId, sourceWindowId, baseRevision, ...patch, uppercutWeight: 0,
+    }) ?? Promise.reject(new Error('offline'));
+  }
+
+  submitFightAnalysis(matchId: bigint, analysis: string): Promise<unknown> {
+    return this.conn?.reducers.submitFightAnalysis({ matchId, analysis }) ?? Promise.reject(new Error('offline'));
   }
 
   /** Forward one CV sample. Pose is throttled; events are never dropped or merged. */

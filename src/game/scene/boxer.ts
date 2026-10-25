@@ -3,9 +3,10 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Body, Guard, PunchType } from '../cv/contract';
 import { BoxingAnimationController, type ClipSlot, type HeldSlot } from './animation-controller';
+import { GloveAnimation } from './glove-animation';
 
 // Gameplay uses the same animation controller for the bot and PvP boxer assets.
-// First-person gloves stay primitive: there is no player body model.
+// First-person gloves use separate camera-space models and transform animation.
 
 export type Hand = 'left' | 'right';
 export type AnyPunch = PunchType;
@@ -15,7 +16,6 @@ const HANDS = ['left', 'right'] as const;
 
 /** Slot 0 is the red corner, slot 1 the blue corner. */
 export const cornerOf = (slot: number): Corner => (slot === 0 ? 'red' : 'blue');
-export const CORNER_COLOR: Record<Corner, number> = { red: 0xd63031, blue: 0x2563eb };
 
 const MODEL_URL: Record<BoxerLook, string> = {
   claude: '/claude_botv3.glb',
@@ -32,20 +32,6 @@ const BOT_HEAD_TOP_M = 1.95;
 const MODEL_ASSETS: Partial<Record<BoxerLook, Promise<GLTF>>> = {};
 const loadModel = (look: BoxerLook) =>
   (MODEL_ASSETS[look] ??= new GLTFLoader().loadAsync(MODEL_URL[look]));
-/**
- * Glove offset from guard for a punch at progress `s` (0 = guard, 1 = full extension),
- * in a frame where +forward is toward the target, +up is up, and `out` points away
- * from the body's centre line on this glove's side.
- */
-function punchOffset(type: AnyPunch, s: number, reach: number) {
-  switch (type) {
-    case 'left_hook': case 'right_hook':
-      return { forward: reach * 0.8 * s, up: 0.04 * s, out: 0.35 * Math.sin(s * Math.PI) - 0.9 * s };
-    case 'left_straight': case 'right_straight':
-      return { forward: reach * s, up: 0.05 * s, out: -0.85 * s };
-  }
-}
-
 /** Straights keep the available jab/cross animation clips; action names stay anatomical. */
 function punchSlot(hand: Hand, type: AnyPunch): ClipSlot {
   if (type.endsWith('_hook')) return hand === 'left' ? 'left_hook' : 'right_hook';
@@ -177,13 +163,10 @@ export class Boxer {
 /** First-person gloves attached to the camera, driven by CV wrist markers. */
 export class PlayerGloves {
   readonly root = new THREE.Group();
-  private gloves: Record<Hand, THREE.Mesh>;
-  private punchAt: Record<Hand, { t: number; type: AnyPunch }> = {
-    left: { t: -Infinity, type: 'left_straight' },
-    right: { t: -Infinity, type: 'right_straight' },
-  };
+  private gloves: Record<Hand, THREE.Group> = { left: new THREE.Group(), right: new THREE.Group() };
+  private motions: Record<Hand, THREE.Group> = { left: new THREE.Group(), right: new THREE.Group() };
+  private animations: Record<Hand, GloveAnimation>;
   private guard: Record<Hand, Guard> = { left: 'neutral', right: 'neutral' };
-  private material = new THREE.MeshStandardMaterial({ color: CORNER_COLOR.red, roughness: 0.35 });
   private target: Record<Hand, THREE.Vector3> = {
     left: new THREE.Vector3(-0.22, -0.2, -0.45),
     right: new THREE.Vector3(0.22, -0.2, -0.45),
@@ -191,15 +174,69 @@ export class PlayerGloves {
   visible: Record<Hand, boolean> = { left: true, right: true };
 
   constructor() {
-    const mat = this.material;
-    this.gloves = {
-      left: new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 14), mat),
-      right: new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 14), mat),
+    this.animations = {
+      left: new GloveAnimation(this.motions.left, 'left'),
+      right: new GloveAnimation(this.motions.right, 'right'),
     };
     for (const hand of HANDS) {
-      this.gloves[hand].scale.set(1, 1, 1.3);
       this.gloves[hand].position.copy(this.target[hand]);
+      this.gloves[hand].add(this.motions[hand]);
       this.root.add(this.gloves[hand]);
+    }
+    void this.loadModels();
+  }
+
+  private async loadModels() {
+    const loader = new GLTFLoader();
+    const loaded = await Promise.all(HANDS.map(async hand => {
+      try {
+        return (await loader.loadAsync(`/${hand}_glove.glb`)).scene;
+      } catch (error) {
+        console.error(`/${hand}_glove.glb failed to load`, error);
+        return null;
+      }
+    }));
+    const assets: Partial<Record<Hand, THREE.Object3D>> = {};
+    HANDS.forEach((hand, i) => { assets[hand] = loaded[i] ?? undefined; });
+    const hasMesh = (model: THREE.Object3D | undefined): model is THREE.Object3D => {
+      let found = false;
+      model?.traverse(object => { if ((object as THREE.Mesh).isMesh) found = true; });
+      return found;
+    };
+
+    for (const hand of HANDS) {
+      let sourceHand: Hand | undefined = hasMesh(assets[hand]) ? hand : undefined;
+      if (!sourceHand) sourceHand = HANDS.find(candidate => hasMesh(assets[candidate]));
+      if (!sourceHand) {
+        console.error('No usable first-person glove model was found');
+        continue;
+      }
+      if (sourceHand !== hand) console.warn(`/${hand}_glove.glb has no mesh; mirroring /${sourceHand}_glove.glb instead`);
+
+      const model = cloneSkinned(assets[sourceHand]!);
+      model.rotation.x = -Math.PI / 2; // orient the glove toward the opponent (-Z)
+      model.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(model);
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const maxDimension = Math.max(size.x, size.y, size.z);
+      if (!Number.isFinite(maxDimension) || maxDimension <= 0) continue;
+      const scale = 0.34 / maxDimension;
+      const mirror = sourceHand === hand ? 1 : -1;
+      model.scale.set(scale * mirror, scale, scale);
+      model.position.set(-center.x * scale * mirror, -center.y * scale, -center.z * scale);
+      model.traverse(object => {
+        const mesh = object as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const copies = materials.map(material => {
+          return material.clone();
+        });
+        mesh.material = Array.isArray(mesh.material) ? copies : copies[0]!;
+      });
+      this.motions[hand].add(model);
     }
   }
 
@@ -207,43 +244,35 @@ export class PlayerGloves {
   setMarker(hand: Hand, marker: { x: number; y: number } | undefined) {
     this.visible[hand] = !!marker;
     if (!marker) return;
-    const screenX = 1 - marker.x; // mirror for a selfie-style view, keep the hand label
-    this.target[hand].set((screenX - 0.5) * 1.6, -0.2 + (0.5 - marker.y) * 0.5, -0.45);
+    const screenX = 1 - marker.x; // mirrored preview, anatomical label is unchanged
+    const expectedX = hand === 'left' ? 0.46 : 0.54;
+    const baseX = hand === 'left' ? -0.22 : 0.22;
+    this.target[hand].set(
+      baseX + THREE.MathUtils.clamp((screenX - expectedX) * 0.45, -0.055, 0.055),
+      -0.2 + THREE.MathUtils.clamp((0.5 - marker.y) * 0.12, -0.045, 0.045),
+      -0.45,
+    );
   }
 
   setGuard(hand: Hand, guard: Guard) {
+    if (this.guard[hand] !== guard) this.animations[hand].setBlock(guard === 'block');
     this.guard[hand] = guard;
   }
 
-  setCorner(corner: Corner) {
-    this.material.color.setHex(CORNER_COLOR[corner]);
-  }
-
   punch(hand: Hand, type: AnyPunch) {
-    this.punchAt[hand] = { t: performance.now(), type };
+    this.animations[hand].punch(type);
   }
 
   update(dt: number) {
-    const t = performance.now();
     for (const hand of HANDS) {
-      const glove = this.gloves[hand];
-      glove.visible = this.visible[hand];
-      const outSign = hand === 'left' ? -1 : 1; // camera space: my left glove is -X
+      const anchor = this.gloves[hand];
+      anchor.visible = this.visible[hand];
       const target =
         this.guard[hand] === 'block'
-          ? new THREE.Vector3(outSign * 0.085, -0.04, -0.27)
+          ? new THREE.Vector3(hand === 'left' ? -0.085 : 0.085, -0.04, -0.27)
           : this.target[hand].clone();
-
-      const { t: at, type } = this.punchAt[hand];
-      const p = (t - at) / 280;
-      if (p >= 0 && p < 1) {
-        const s = Math.sin(p * Math.PI);
-        const o = punchOffset(type, s, 0.55);
-        target.z -= o.forward;
-        target.y += o.up * 0.8;
-        target.x += outSign * o.out * Math.abs(this.target[hand].x);
-      }
-      glove.position.lerp(target, Math.min(1, dt * 30));
+      anchor.position.lerp(target, Math.min(1, dt * 30));
+      this.animations[hand].update(dt);
     }
   }
 }

@@ -40,7 +40,7 @@ button.chip:hover { border-color: rgba(255,255,255,0.5); }
 
 .menu {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 16px; background: radial-gradient(ellipse at center, rgba(7,8,12,0.55), rgba(7,8,12,0.9)); text-align: center; padding: 16px;
+  gap: 16px; background: radial-gradient(ellipse at center, rgba(7,8,12,0.28), rgba(7,8,12,0.62)); text-align: center; padding: 16px;
 }
 .menu h1 { margin: 0; font-size: clamp(36px, 8vw, 72px); letter-spacing: 0.06em; font-weight: 900; }
 .menu .buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
@@ -62,6 +62,23 @@ code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; 
 }
 .adapt .label { font-weight: 700; margin-bottom: 4px; }
 .adapt .nums { color: var(--dim); margin-top: 4px; }
+
+.claude-log {
+  position: absolute; right: 16px; bottom: 16px; z-index: 5;
+  width: min(360px, calc(100vw - 32px)); max-height: min(360px, 55vh);
+  overflow: auto; box-sizing: border-box; pointer-events: auto;
+  background: rgba(10,12,18,0.94); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 7px; font-size: 12px;
+}
+.claude-log summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
+.claude-log summary span { color: var(--dim); font-weight: 400; }
+.claude-log ol { margin: 0; padding: 0 12px 10px; list-style: none; }
+.claude-log li { display: flex; gap: 9px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.12); line-height: 1.35; }
+.claude-log li time { flex: none; color: var(--dim); font-variant-numeric: tabular-nums; }
+.claude-log li.error { color: var(--warn); }
+.claude-log li.strategy { color: var(--good); }
+.claude-log li.empty { color: var(--dim); }
+@media (max-width: 640px) { .claude-log { bottom: 8px; right: 8px; width: min(280px, calc(100vw - 16px)); } }
 
 .pause { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(7,8,12,0.6); text-align: center; }
 .pause h2 { margin: 0 0 8px; color: var(--warn); }

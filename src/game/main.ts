@@ -13,6 +13,9 @@ import { poseOf, type Body, type CvProvider, type Guard, type Observation, type 
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView, type RingView } from './net/server';
 import { Hud, type HudState, type InputMode, type RingSummary } from './hud';
+import { parsePatch, type StrategyRequest } from '../../coach/strategist';
+import type { AnalysisRequest } from '../../coach/analysis';
+import type { FightWindowRow } from './net/server';
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -59,6 +62,12 @@ const ORBIT_RADIUS_M = 9.5;
 const ORBIT_HEIGHT_M = 5;
 const ORBIT_RAD_PER_S = 0.12;
 let orbitAngle = 0.6;
+// The 2 × 2 grid leaves a gap at world origin. Orbit inside it while looking
+// outward; looking back at the origin would show only empty floor.
+const LOBBY_RADIUS_M = 0.9;
+const LOBBY_HEIGHT_M = 3.2;
+const LOBBY_LOOK_DISTANCE_M = 10;
+let lobbyAngle = Math.PI / 4;
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -97,6 +106,112 @@ const markDirty = () => {
 let latest: Observation | undefined;
 let myPose: PoseState = { body: 'neutral', guards: { left: 'neutral', right: 'neutral' } };
 let shakeUntil = 0;
+const requestedWindows = new Set<string>();
+const analyzingMatches = new Set<string>();
+const strategyInFlight = new Set<string>();
+const loggedBotMatches = new Set<string>();
+
+async function onFightWindow(window: FightWindowRow) {
+  const matchId = String(window.matchId);
+  const key = `${matchId}:${window.id}`;
+  if (requestedWindows.has(key) || strategyInFlight.has(matchId)) return;
+  const current = server.currentMatch();
+  if (!current || current.match.id !== window.matchId || current.match.mode !== 'bot' ||
+      current.match.status !== 'active' || !current.strategy) return;
+  requestedWindows.add(key);
+  const attempts = window.playerStraights + window.playerHooks + window.playerUnclassified;
+  hud.logClaude('window', `Match ${matchId}, window ${window.id}: ${window.playerLanded}/${attempts} punches landed; tracking ${Math.round(window.trackingCoverage * 100)}%.`);
+  if (window.trackingCoverage < 0.5) {
+    hud.logClaude('strategy', 'Strategy unchanged: tracking was too unreliable.');
+    return;
+  }
+  const p = server.profile();
+  const s = current.strategy;
+  const req: StrategyRequest = {
+    windowId: String(window.id), matchId, revision: s.revision,
+    attempts,
+    landed: window.playerLanded, leftAttempts: window.playerLeftAttempts,
+    rightAttempts: window.playerRightAttempts, straights: window.playerStraights,
+    hooks: window.playerHooks, slips: window.playerSlips, blocks: window.playerBlocks,
+    hitsTaken: window.playerHitsTaken, trackingCoverage: window.trackingCoverage,
+    profile: { leftAttempts: p?.leftAttempts ?? 0, rightAttempts: p?.rightAttempts ?? 0,
+      straights: p?.straights ?? 0, hooks: p?.hooks ?? 0, punchesLanded: p?.punchesLanded ?? 0 },
+    strategy: { aggression: s.aggression, punchIntervalMs: s.punchIntervalMs,
+      jabWeight: s.jabWeight, straightWeight: s.straightWeight, hookWeight: s.hookWeight,
+      leftBias: s.leftBias, defenseRate: s.defenseRate, telegraphMs: s.telegraphMs,
+      explanation: s.explanation },
+  };
+  strategyInFlight.add(matchId);
+  hud.logClaude('strategy', `Checking window ${window.id} with Claude…`);
+  try {
+    const response = await fetch('/api/strategist', { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) });
+    if (!response.ok) {
+      hud.logClaude('error', `Strategy request failed (${response.status}); current strategy stays active.`);
+      return;
+    }
+    const patch = parsePatch(await response.json());
+    const latest = server.currentMatch();
+    if (!patch) {
+      hud.logClaude('error', 'Strategy response was invalid; current strategy stays active.');
+      return;
+    }
+    if (!('aggression' in patch)) {
+      hud.logClaude('strategy', patch.reason);
+      return;
+    }
+    if (!latest || latest.match.id !== window.matchId ||
+        latest.match.status !== 'active' || latest.strategy?.revision !== s.revision) {
+      hud.logClaude('strategy', 'Strategy response arrived after the fight changed; discarded.');
+      return;
+    }
+    const { skip: _skip, ...fields } = patch;
+    await server.applyStrategyUpdate(window.matchId, window.id, s.revision, fields);
+    hud.logClaude('strategy', `Applied revision ${s.revision + 1}: ${fields.explanation} (aggression ${fields.aggression.toFixed(2)}, left bias ${fields.leftBias.toFixed(2)}).`);
+  } catch (error) {
+    console.warn('[strategist]', error);
+    hud.logClaude('error', 'Strategy update failed; current strategy stays active.');
+  } finally {
+    strategyInFlight.delete(matchId);
+  }
+}
+
+async function analyzeMatch(matchId: bigint, mySlot: number, won: boolean, reason: string, playerName: string, playerHealth: number) {
+  const key = String(matchId);
+  if (analyzingMatches.has(key)) return;
+  analyzingMatches.add(key);
+  const attacks = server.attacks(matchId).filter(a => a.result !== 'pending' &&
+    a.result !== 'cancelled' && a.result !== 'unscorable');
+  const mine = attacks.filter(a => a.attackerSlot === mySlot);
+  const incoming = attacks.filter(a => a.attackerSlot !== mySlot);
+  const req: AnalysisRequest = {
+    matchId: key, playerName, playerHealth, won, reason,
+    attempts: mine.length,
+    landed: mine.filter(a => a.result === 'landed').length,
+    straights: mine.filter(a => a.punchType.endsWith('_straight')).length,
+    hooks: mine.filter(a => a.punchType.endsWith('_hook')).length,
+    slips: incoming.filter(a => a.detail === 'slipped').length,
+    blocks: incoming.filter(a => a.result === 'blocked').length,
+    hitsTaken: incoming.filter(a => a.result === 'landed').length,
+  };
+  hud.logClaude('analysis', `Match ${key} ended by ${reason}. Requesting analysis from ${req.landed}/${req.attempts} landed punches.`);
+  try {
+    const response = await fetch('/api/analysis', { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) });
+    if (!response.ok) {
+      hud.logClaude('error', `Analysis request failed (${response.status}).`);
+      return;
+    }
+    const data = await response.json() as { text?: string; source?: 'claude' | 'offline' };
+    if (typeof data.text === 'string' && data.text && server.result(matchId)?.analysis === '') {
+      await server.submitFightAnalysis(matchId, data.text);
+      hud.logClaude('analysis', `${data.source === 'claude' ? 'Claude analysis' : 'Offline analysis'} saved to the fight result: ${data.text}`);
+    }
+  } catch (error) {
+    console.warn('[analysis]', error);
+    hud.logClaude('error', 'Analysis could not be saved.');
+  }
+}
 
 const server = new GameServer({
   onStatus(status, detail) {
@@ -105,6 +220,7 @@ const server = new GameServer({
     refresh();
   },
   onChange: markDirty,
+  onFightWindow: window => { void onFightWindow(window); },
   onError: message => hud.toast(message, 'bad'),
   onRingAttack: atk => arena.attack(atk),
   onRingAttackResolved: atk => arena.resolved(atk),
@@ -212,7 +328,21 @@ function refresh() {
   if (view?.match.status === 'active') hudState.spectating = false;
   hudState.view = view;
   hudState.result = view ? server.result(view.match.id) : undefined;
+  if (view?.match.mode === 'bot' && view.match.status === 'finished' &&
+      hudState.result && !hudState.result.analysis) {
+    void analyzeMatch(view.match.id, view.me.slot, hudState.result.winnerSlot === view.me.slot,
+      hudState.result.reason, server.nameOf(view.me), view.me.health / 10);
+  }
   hudState.profile = server.profile();
+  if (view?.match.mode === 'bot' && view.match.status === 'active') {
+    const matchId = String(view.match.id);
+    if (!loggedBotMatches.has(matchId)) {
+      loggedBotMatches.add(matchId);
+      hud.logClaude('strategy', `Match ${matchId} started with the baseline bot strategy. Claude checks reliable fight windows as they arrive.`);
+    }
+    const latestWindow = server.windows(view.match.id).at(-1);
+    if (latestWindow) void onFightWindow(latestWindow);
+  }
   hudState.queued = server.inQueue();
   hudState.queueLength = server.queueLength();
   hudState.rings = rings.map(summarize);
@@ -223,7 +353,6 @@ function refresh() {
     : [server.nameOf(watched?.fighters[0]), server.nameOf(watched?.fighters[1])];
   // The Claude-themed bot is PvE only; a PvP opponent is a fighter in their corner colour.
   opponent.setLook(view?.match.mode === 'pvp' ? cornerOf(view.opponent.slot) : 'claude');
-  gloves.setCorner(cornerOf(view?.me.slot ?? 0));
   arena.sync(rings);
   hud.render(hudState);
 }
@@ -413,13 +542,20 @@ renderer.setAnimationLoop(() => {
   const fp = isFirstPerson();
   firstPerson.visible = fp;
   gloves.root.visible = fp;
-  arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
+  arena.setFocus(fp ? view!.match.ring : hudState.spectating ? hudState.watch : null, fp, fp && view!.me.slot === 1);
   arena.update(dt, Date.now());
   if (!fp) {
-    orbitAngle += dt * ORBIT_RAD_PER_S;
-    camera.position.set(Math.sin(orbitAngle) * ORBIT_RADIUS_M, ORBIT_HEIGHT_M, Math.cos(orbitAngle) * ORBIT_RADIUS_M);
-    camera.lookAt(0, 1.1, 0);
-    hud.tick(watchedView());
+    if (hudState.spectating) {
+      orbitAngle += dt * ORBIT_RAD_PER_S;
+      camera.position.set(Math.sin(orbitAngle) * ORBIT_RADIUS_M, ORBIT_HEIGHT_M, Math.cos(orbitAngle) * ORBIT_RADIUS_M);
+      camera.lookAt(0, 1.1, 0);
+      hud.tick(watchedView());
+    } else {
+      lobbyAngle += dt * ORBIT_RAD_PER_S;
+      camera.position.set(Math.sin(lobbyAngle) * LOBBY_RADIUS_M, LOBBY_HEIGHT_M, Math.cos(lobbyAngle) * LOBBY_RADIUS_M);
+      camera.lookAt(Math.sin(lobbyAngle) * LOBBY_LOOK_DISTANCE_M, 1.2, Math.cos(lobbyAngle) * LOBBY_LOOK_DISTANCE_M);
+      hud.tick(undefined);
+    }
     renderer.render(scene, camera);
     return;
   }

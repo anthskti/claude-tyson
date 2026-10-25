@@ -5,6 +5,7 @@ import { RULES_HTML } from './combatText';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
 
 const MAX_STAMINA = 200;
+const MAX_HEALTH = 100; // SpacetimeDB stores tenths: 100 = 10 HP and a full bar.
 
 // Plain-DOM HUD. Re-rendered on server changes; the timer and health bars are also
 // refreshed every frame via tick().
@@ -83,6 +84,10 @@ export class Hud {
       <div id="menu" class="menu"></div>
       <div id="spectate" class="spectate"></div>
       <div id="adapt" class="adapt"></div>
+      <details id="claude-log" class="claude-log">
+        <summary>Claude log <span id="claude-log-count">0</span></summary>
+        <ol id="claude-log-entries"><li class="empty">Fight an adaptive bot to see its decisions here.</li></ol>
+      </details>
       <div id="pause" class="pause"></div>
       <div id="calibration" class="calibration"></div>
       <div id="toasts" class="toasts"></div>
@@ -121,6 +126,21 @@ export class Hud {
     this.root.replaceChildren();
   }
 
+  logClaude(kind: 'window' | 'strategy' | 'analysis' | 'error', message: string) {
+    const entries = el('claude-log-entries');
+    entries.querySelector('.empty')?.remove();
+    const item = document.createElement('li');
+    item.className = kind;
+    const time = document.createElement('time');
+    time.textContent = new Date().toLocaleTimeString();
+    const detail = document.createElement('span');
+    detail.textContent = message;
+    item.append(time, detail);
+    entries.prepend(item);
+    while (entries.children.length > 50) entries.lastElementChild?.remove();
+    el('claude-log-count').textContent = String(entries.children.length);
+  }
+
   render(s: HudState) {
     const active = s.view?.match.status === 'active';
     const keys = this.root.querySelector<HTMLElement>('.keys');
@@ -152,7 +172,7 @@ export class Hud {
         <div class="explain">${escapeHtml(strat.explanation)}</div>
         <div class="nums">aggr ${strat.aggression.toFixed(2)} · interval ${strat.punchIntervalMs}ms ·
           mix L/R/H ${[strat.jabWeight, strat.straightWeight, strat.hookWeight].map(w => w.toFixed(2)).join('/')} ·
-          left ${(strat.leftBias * 100).toFixed(0)}% · defends ${(strat.defenseRate * 100).toFixed(0)}% ·
+          left ${((strat.leftBias + 1) * 50).toFixed(0)}% · defends ${(strat.defenseRate * 100).toFixed(0)}% ·
           telegraph ${strat.telegraphMs}ms</div>`;
     }
 
@@ -247,8 +267,8 @@ export class Hud {
   /** Pass the watched ring as a MatchView (red as `me`) while spectating. */
   tick(view: MatchView | undefined) {
     const active = view?.match.status === 'active';
-    el('hp-me').style.width = `${view ? Math.max(0, view.me.health / 10) : 100}%`;
-    el('hp-opp').style.width = `${view ? Math.max(0, view.opponent.health / 10) : 100}%`;
+    el('hp-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.health / MAX_HEALTH * 100)) : 100}%`;
+    el('hp-opp').style.width = `${view ? Math.max(0, Math.min(100, view.opponent.health / MAX_HEALTH * 100)) : 100}%`;
     el('stamina-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.stamina / MAX_STAMINA * 100)) : 100}%`;
     el('stamina-opp').style.width = `${view ? Math.max(0, Math.min(100, view.opponent.stamina / MAX_STAMINA * 100)) : 100}%`;
     let remaining = 30;
