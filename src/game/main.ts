@@ -206,6 +206,7 @@ function isFirstPerson(): boolean {
 function refresh() {
   dirty = false;
   view = server.currentMatch();
+  sim.setStamina(view?.me.stamina ?? 0);
   rings = server.rings();
   // A fight of mine starting (say, from the queue) pulls me out of spectating.
   if (view?.match.status === 'active') hudState.spectating = false;
@@ -237,16 +238,17 @@ function watchedView(): MatchView | undefined {
 // ─── CV input ──────────────────────────────────────────────────────────────
 
 // The keyboard and the webcam share one provider: camera input presses the same control
-// keys the keyboard does. In camera mode the keyboard's punch/slip/guard keys are ignored
+// keys the keyboard does. In camera mode the keyboard's punch/dodge/block keys are ignored
 // so everything comes from CV; blocks are classified from the wrist and head markers
-// against a per-player calibration (cv/guard.ts). C still recalibrates.
+// against a per-player calibration (cv/guard.ts). X still recalibrates.
 const sim = new SimulatedCvProvider();
 const cv: CvProvider = sim;
-const CV_DRIVEN_KEYS = ['j', 'u', 'k', 'i', 'a', 'd', 'q', 'e', 'w'];
+const CV_DRIVEN_KEYS = ['j', 'c', 'q', 'e', 'a', 'd', 'b'];
 const KEY_LABEL: Record<string, string> = {
-  j: 'J', u: 'U', k: 'K', i: 'I', a: 'hold A', d: 'hold D', q: 'hold Q', e: 'hold E',
+  j: 'J', c: 'C', q: 'Q', e: 'E', a: 'hold A', d: 'hold D', b: 'hold B',
+  cv_guard_left: 'left block', cv_guard_right: 'right block',
 };
-const GUARD_KEY = { left: 'q', right: 'e' } as const;
+const GUARD_KEY = { left: 'cv_guard_left', right: 'cv_guard_right' } as const;
 const feed = new CameraFeed(document.getElementById('hud')!);
 
 // Saved per machine so the next match can skip calibration.

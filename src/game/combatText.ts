@@ -37,5 +37,5 @@ export const RULES_HTML = `
     <tr><td>Block (both gloves) · 4 stamina/s</td><td>either straight</td><td><b>either hook</b></td></tr>
     <tr><td>Dodge · 20 stamina</td><td>either straight + same-side hook</td><td><b>opposite hook</b> (×1.5)</td></tr>
   </table>
-  <div class="dim">Left straight: 0.5 damage / 5 stamina. Right straight: 1.3 / 12. Hooks: 1.0 / 16.
-  Stamina regenerates at 12/s while idle. Server decides accepted actions and damage.</div>`;
+  <div class="dim">Stamina pool: 200. Left straight: 0.5 damage / 5 stamina. Right straight: 1.3 / 12. Hooks: 1.0 / 16.
+  Stamina regenerates at 18/s while idle. Server decides accepted actions and damage.</div>`;

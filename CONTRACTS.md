@@ -1,116 +1,126 @@
-- Claude Tyson — shared contracts v3 (TypeScript shapes, NOT SpacetimeDB schema).
-- Browser: MediaPipe Pose/Hands -> classification -> MotionEvent -> submitMotion.
-- SpacetimeDB: authenticates sender, translates inputs to FightAction, resolves combat,
-- stores matches/events/results and publishes authoritative state.
-- Claude: adjusts tactical weights inside server limits; no live coach or combos.
--
-- Directions and hands use the fighter's ANATOMICAL left/right, not mirrored video.
-- Numbers suffixed 01 mean [0,1], Bias values [-1,1]; validate at runtime.
-- Client timestamps are diagnostic only; server timestamps decide hit windows.
-  \*/
+# Claude Tyson — live game contract
 
-export type MatchStatus = "waiting" | "ready" | "active" | "finished" | "cancelled";
-export type MatchMode = "pvp" | "adaptive_bot";
-// Straights and hooks are named by anatomical hand; left/right straight are distinct moves.
-export type PunchType = "left_straight" | "right_straight" | "left_hook" | "right_hook";
-export type FightAction =
-| { kind: "punch"; punch: PunchType }
-| { kind: "block_start" }
-| { kind: "block_end" }
-| { kind: "dodge_start"; direction: "left" | "right" }
-| { kind: "dodge_end" };
+This document describes the online game implemented by `spacetimedb/src/index.ts` and
+`spacetimedb/src/rules.ts`. It is a design reference, not generated SpacetimeDB schema.
+The standalone arena in `engine/engine.ts` is a separate prototype and currently has a
+different combat model; it is not authoritative for online matches.
 
-// Identity & matchmaking -------------------------------------------------------
-export interface PlayerProfile {
-playerId: string; // Immutable stable ID; NEVER use displayName as PK.
-displayName: string;
-createdAtUnixMs: number;
-matchesPlayed: number;
-wins: number;
-losses: number;
-draws: number;
-skillEstimate01: number; // Server-calculated, hidden from difficulty selection.
-learnedStyle: PlayerStyle; // Rolling aggregate across matches.
+## Match and action vocabulary
+
+```ts
+export type MatchMode = 'bot' | 'pvp';
+export type MatchStatus = 'active' | 'finished';
+export type Body = 'neutral' | 'lean_left' | 'lean_right';
+export type Guard = 'neutral' | 'block';
+export type Hand = 'left' | 'right';
+export type PunchType = 'left_straight' | 'right_straight' | 'left_hook' | 'right_hook';
+export type AttackResult = 'pending' | 'landed' | 'blocked' | 'dodged' | 'unscorable' | 'cancelled';
+```
+
+Hands and directions are anatomical. The online game has four punches: left/right
+straight and left/right hook. There are no uppercuts, combos, or world-position movement.
+Animation clip names and keyboard bindings are client presentation/input details; they
+do not change the server action vocabulary. Current keyboard bindings are J/C for left and
+right straight, Q/E for left and right hook, A/D for left and right dodge, and B (held)
+for a two-glove block.
+
+## Client input to SpacetimeDB
+
+The live client calls two reducers. It does not send a generic `MotionEvent` object to a
+`submitMotion` reducer.
+
+```ts
+export interface UpdatePoseArgs {
+  matchId: bigint;
+  cvSessionId: string;
+  calibrationId: string;
+  trackingState: 'good' | 'degraded' | 'lost' | 'calibrating';
+  dodgeValid: boolean;
+  punchLeftValid: boolean;
+  punchRightValid: boolean;
+  bodyState: Body;
+  leftGuard: Guard;
+  rightGuard: Guard;
+  lateral: number; // rendering only; clamped to [-3, 3]
 }
 
-export interface Match {
-matchId: string;
-mode: MatchMode;
-status: MatchStatus;
-fighterAPlayerId: string;
-fighterBPlayerId?: string; // null/omitted for AI.
-botId?: "claude_tyson"; // Present only for adaptive_bot.
-createdAtUnixMs: number;
-startedAtUnixMs?: number;
-endedAtUnixMs?: number;
-durationMs: number;
-winner?: "a" | "b" | "draw";
-endReason?: "knockout" | "timeout" | "forfeit" | "disconnect";
+export interface SubmitMotionEventArgs {
+  matchId: bigint;
+  cvSessionId: string;
+  eventId: string;
+  eventType: string;
+  punchType: string; // '' falls back to the straight for the event's hand
 }
+```
 
-export interface CreateMatchRequest { mode: MatchMode }
+`updatePose` carries continuous body, guard, validity, and tracking state. Defense is
+derived from this pose; there are no separate server `block_start`, `block_end`,
+`dodge_start`, or `dodge_end` reducer calls. The client submits discrete punch events
+through `submitMotionEvent`; only `punch_left` and `punch_right` start attacks. A supplied
+`punchType` must match the event hand. Unknown or absent punch types fall back to that
+hand's straight.
 
-// Local CV output -> authoritative game action --------------------------------
-/\*\*
+The server authenticates the sender as a fighter in the active match. It deduplicates
+`cvSessionId:eventId`, rejects events from an old CV session, and requires a fresh usable
+pose (at most 250 ms old) when resolving attacks. Human pose is usable when tracking is
+`good` or `degraded` and dodge tracking is valid. No camera frames or landmark streams
+are sent to the server. The server clock controls cooldowns, attack timing, and hit
+resolution; client timestamps are not authoritative.
 
-- MediaPipe detects landmarks locally; client classifier emits a discrete action.
-- No raw webcam frames and no per-frame landmark streams sent to the server.
-- Client never submits damage, winner, fighter slot, or hit decisions.
-  \*/
-  export interface MotionEvent {
-  schemaVersion: 3;
-  matchId: string;
-  inputId: string; // Dedup retry ID; unique per connection.
-  sequence: number; // Increasing for this connection.
-  clientAtMs: number; // Diagnostics only; not authoritative for hits.
-  source: "mediapipe";
-  confidence01: number;
-  trackingQuality01: number;
-  kind: "action" | "tracking";
-  action?: FightAction; // Required when kind === action; runtime-check.
-  tracking?: "lost" | "recovered"; // Required when kind === tracking.
-  dodgeEvidence?: {
-  method: "nose_relative_to_shoulders";
-  offsetShoulderWidths: number; // Signed, anatomical left < 0, right > 0.
-  magnitude01: number;
-  }; // Only allowed for dodge_start; do not use as server hit verdict.
-  }
+## Authoritative combat rules
 
-/\*_ Internal-only bot input. Exactly the same action vocabulary as human input. _/
-export interface BotAction {
-matchId: string;
-botSlot: "b";
-action: FightAction;
-}
+Health is stored as integer tenths: `100` means 10 HP (the starting health). Stamina is a server-owned
+floating value from 0 to 200. Damage, stamina costs, startup, and recovery below are the
+current first-pass tuning in `spacetimedb/src/rules.ts`.
 
-// Server-owned combat state ----------------------------------------------------
-export interface FighterState {
-matchId: string;
-slot: "a" | "b"; // Composite identity (matchId, slot).
-playerId?: string; // absent for bot.
-health: number;
-maxHealth: number;
-stamina: number; // Server-owned, 0..100; damage uses fixed punch values.
-state: "idle" | "attacking" | "blocking" | "dodging" | "hit" | "ko";
-stateStartedAtUnixMs: number;
-dodgeDirection?: "left" | "right";
-tracking: "ok" | "lost"; // AI always ok.
-activeAction?: FightAction;
-}
+| Punch | Damage | Startup | Recovery | Stamina |
+| --- | ---: | ---: | ---: | ---: |
+| Left straight | 0.5 HP | 120 ms | 220 ms | 5 |
+| Right straight | 1.3 HP | 200 ms | 320 ms | 12 |
+| Left hook | 1.0 HP | 220 ms | 360 ms | 16 |
+| Right hook | 1.0 HP | 220 ms | 360 ms | 16 |
 
-// First-pass authoritative tuning. SpacetimeDB stores health and damage in
-// tenths of one health point (1000 health = 100.0 HP).
-export const COMBAT_RULES = {
-  maxHealth: 1000,
-  maxStamina: 100,
-  staminaRegenPerSec: 12,
-  blockDrainPerSec: 4,
-  dodgeCost: 20,
-  punchDamage: { left_straight: 5, right_straight: 13, left_hook: 10, right_hook: 10 },
-  punchStamina: { left_straight: 5, right_straight: 12, left_hook: 16, right_hook: 16 },
-  oppositeHookVsDodgeMultiplier: 1.5,
-} as const;
+- Punches lock the whole fighter for the greater of the punch's recovery or startup plus
+  150 ms. Either hand's punch is rejected during that lock; missed punches are discarded
+  rather than buffered.
+- Block requires both gloves to be raised and neither punch recovery lock to be active.
+  It starts protecting after 80 ms, blocks straights, and does not stop hooks. It drains
+  4 stamina per second and ends when stamina is exhausted or after a maximum 2 seconds.
+  Releasing block starts a 300 ms defense cooldown. A block timed out at 2 seconds stays
+  locked until the player releases it. One raised glove does not stop punches from
+  landing, but still prevents the fighter from starting a punch until lowered.
+- A dodge costs 20 stamina and starts protecting after 100 ms. Dodges avoid all straights
+  and the same-side hook. The opposite-side hook lands for 1.5 times base damage. The
+  dodge protection window is 350 ms; holding the pose does not extend that window. A
+  dodge may remain visually held until release, with a 2 second maximum, and has a
+  260 ms cooldown after release.
+- Block and dodge cannot start while another action/recovery lock is active or switch
+  directly into each other. The server is authoritative; late or invalid requests do not
+  create a queued action.
+- Stamina regenerates at 18 per second when not actively blocking, dodging, or under a
+  punch recovery lock. Punches require enough stamina to pay their listed cost.
+- A successful dodge opens a 700 ms counter window. Attacks inside it are marked as
+  counters, and the bot favors a straight counter. The current resolver does not apply a
+  separate counter damage multiplier.
+- A match starts at 10 HP and lasts 30 seconds. Reaching zero health ends it immediately by KO; otherwise
+  the higher-health fighter wins the decision. KO is terminal.
+- If the defender's pose is unusable at impact, the attack is `unscorable` and causes no
+  damage. Unscorable attacks are excluded from fight statistics.
 
-// Block stops straights and hooks beat block. Either dodge avoids straights and
-// its same-side hook. The opposite-side hook catches the dodge at 1.5x base.
-// Timing values remain provisional and live in spacetimedb/src/rules.ts.
+The client pauses defense animation clips at authored points (`Hard_Block` at 0.33 s,
+`Left_Dodge` and `Right_Dodge` at 0.25 s). Those visual pauses do not change server
+startup, active windows, maximum holds, or cooldowns.
+
+## Bot strategy
+
+The server creates bot attacks and resolves them through the same punch and damage rules
+as player attacks. Bot defense is selected at attack impact. Strategy updates are accepted
+only for the current revision and a fight window belonging to that match; values are
+clamped server-side. Aggression is `[0, 1]`, punch interval is 600–4000 ms, punch weights
+are individually clamped to `[0, 1]`, left bias is `[0, 1]`, defense rate is `[0, 0.8]`,
+and telegraph time is 350–1200 ms. Text explanation is limited to 500 characters.
+
+The strategy/schema still carries an `uppercutWeight` field for compatibility, but the
+current online bot selects only the four supported straight and hook actions. There is
+no separate `BotBalance`, `PlayerStyle`, or `Analysis` table in the current module; the
+analysis text is stored on `fight_result` and the profile stores aggregate counters.

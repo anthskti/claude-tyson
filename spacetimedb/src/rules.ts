@@ -22,8 +22,8 @@ export const PUNCHES: Record<PunchType, PunchSpec> = {
   right_hook: { damage: 10, startupMs: 220, recoveryMs: 360, stamina: 16, telegraphScale: 1.05 },
 };
 
-export const MAX_STAMINA = 100;
-export const STAMINA_REGEN_PER_SEC = 12;
+export const MAX_STAMINA = 200;
+export const STAMINA_REGEN_PER_SEC = 18;
 export const BLOCK_DRAIN_PER_SEC = 4;
 export const DODGE_COST = 20;
 export const COUNTER_SCALE = 1.5;
