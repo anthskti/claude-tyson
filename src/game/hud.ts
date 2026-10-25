@@ -222,8 +222,6 @@ export class Hud {
     const profileHtml = p
       ? `<div class="profile">
           <div><b>${p.wins}</b>-<b>${p.losses}</b> in ${p.matchesPlayed} fights</div>
-          <div>straights ${p.straights} · hooks ${p.hooks} · landed ${p.punchesLanded} · counters ${p.counters}</div>
-          <div>of ${p.defenseOpportunities} incoming: slipped ${p.slips} · leaned back ${p.leanBacks} · blocked ${p.blocks} · hit ${p.hitsTaken}</div>
         </div>`
       : '';
     const name = s.playerName ?? 'FIGHTER';
@@ -239,7 +237,7 @@ export class Hud {
           : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP</button>`}
         <button data-action="spectate" class="secondary" ${offline ? 'disabled' : ''}>Spectate</button>
       </div>
-      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module.</div>` : this.ringsHtml(s, full)}
+      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module.</div>` : ''}
       ${profileHtml}
       ${nameHtml}`;
   }
@@ -257,11 +255,16 @@ export class Hud {
   private spectateHtml(s: HudState): string {
     const r = s.rings[s.watch];
     const queued = s.queued ? `<span class="chip warn">in PvP queue · you join as soon as a ring frees</span>` : '';
-    return `<button data-action="watchPrev" class="secondary" title="Previous ring">◀</button>
-      <div class="what"><b>Ring ${(r?.ring ?? 0) + 1}</b> · ${r?.label ?? 'Empty'}${r?.fighters ? ` · ${escapeHtml(r.fighters)}` : ''}</div>
-      <button data-action="watchNext" class="secondary" title="Next ring">▶</button>
+    const rows = s.rings.map(ring => `<button class="ring-row ${ring.free ? 'free' : ''} ${ring.ring === s.watch ? 'active' : ''}" data-ring="${ring.ring}">
+        <b>Ring ${ring.ring + 1}</b> ${ring.label}${ring.fighters ? ` · ${escapeHtml(ring.fighters)}` : ''}</button>`).join('');
+    const used = s.rings.filter(r => !r.free).length;
+    const queue = s.queueLength > 0 ? ` · ${s.queueLength} in PvP queue` : '';
+    return `<div class="spectate-rings">
+      <div class="dim">${used} of ${s.rings.length} rings in use${queue}</div>
+      <div class="ring-list">${rows}</div>
       ${queued}
-      <button data-action="leaveSpectate">Menu</button>`;
+    </div>
+    <button data-action="leaveSpectate" class="secondary">Back to Menu</button>`;
   }
 
   /** Pass the watched ring as a MatchView (red as `me`) while spectating. */

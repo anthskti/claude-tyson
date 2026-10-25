@@ -126,6 +126,31 @@ function cinStep(dt: number) {
   }
 }
 
+// Ring centers: 2×2 grid, SPACING_M=16, centred at origin.
+// gridPosition(ring) = ((col-0.5)*16, 0, (row-0.5)*16)
+const RING_CENTERS = [
+  new THREE.Vector3(-8, 0, -8), // Ring 0
+  new THREE.Vector3( 8, 0, -8), // Ring 1
+  new THREE.Vector3(-8, 0,  8), // Ring 2
+  new THREE.Vector3( 8, 0,  8), // Ring 3
+];
+let spectateAngle = 0; // slow orbit around watched ring
+
+function spectateStep(dt: number, ringIdx: number) {
+  spectateAngle = (spectateAngle + dt * 0.15) % (Math.PI * 2); // ~42 s per orbit
+  const center = RING_CENTERS[ringIdx] ?? RING_CENTERS[0];
+  const radius = 11;
+  const height = 3.8;
+  camera.position.set(
+    center.x + Math.sin(spectateAngle) * radius,
+    height,
+    center.z + Math.cos(spectateAngle) * radius,
+  );
+  camera.lookAt(center.x, 1.5, center.z);
+  camera.fov = 62;
+  camera.updateProjectionMatrix();
+}
+
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   const aspect = window.innerWidth / window.innerHeight;
@@ -613,7 +638,11 @@ renderer.setAnimationLoop(() => {
   arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
   arena.update(dt, Date.now());
   if (!fp) {
-    cinStep(dt);
+    if (hudState.spectating) {
+      spectateStep(dt, hudState.watch);
+    } else {
+      cinStep(dt);
+    }
     hud.tick(watchedView());
     renderer.render(scene, camera);
     return;

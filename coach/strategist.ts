@@ -134,7 +134,7 @@ function tool() {
 }
 
 function offlineResponse(req: StrategistRequest): StrategistResponse {
-  return { skip: true, ...req.strategy, uppercutWeight: 0, explanation: "offline fallback" };
+  return { skip: true, ...req.strategy, explanation: "offline fallback" };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -154,7 +154,7 @@ function buildUserMessage(req: StrategistRequest): string {
   return `=== WINDOW #${req.windowId} ===
 Player: ${w.playerLanded}/${w.playerAttempts} landed (${acc}%) | hooks ${hookPct}% | straights ${stPct}%
 Defense: ${w.playerSlips} slips, ${w.playerBlocks} blocks, took ${w.playerCaught} hits
-Health: bot ${w.botHealth}/1000, player ${w.playerHealth}/1000 | tracking ${Math.round(w.trackingCoverage * 100)}%
+Health: bot ${w.botHealth}/100, player ${w.playerHealth}/100 | tracking ${Math.round(w.trackingCoverage * 100)}%
 Bot attacks this window: ${w.botAttacks}
 
 Current strategy (rev ${req.strategyRevision}):
@@ -209,7 +209,7 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
     }
 
     if (inp.skip) {
-      return { skip: true, ...req.strategy, uppercutWeight: 0 };
+      return { skip: true, ...req.strategy };
     }
 
     const explanation = String(inp.explanation ?? "").slice(0, MAX_EXPLANATION_CHARS).trim();

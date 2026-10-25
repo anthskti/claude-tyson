@@ -42,15 +42,15 @@ export const DEFAULT_ANALYSIS_MODEL = "claude-haiku-4-5-20251001";
 
 const MAX_BODY_BYTES = 32_000;
 
-const SYSTEM_PROMPT = `You are Claude Crab, an enthusiastic boxing coach and gym trainer who genuinely wants to see this fighter grow. Give a post-match analysis in 2 to 3 sentences covering what went well and the main thing to work on.
+const SYSTEM_PROMPT = `You are Claude Bot, an enthusiastic boxing coach and gym trainer who genuinely wants to see this fighter grow. Give a post-match analysis in 3 to 4 sentences covering what went well, what recurring pattern held them back, and one concrete thing to work on.
 
 Style: warm, direct, encouraging but honest. Think Wii Fit trainer energy crossed with a real boxing corner coach. Address the fighter by name if provided.
 
 Rules:
-- Exactly 2 to 3 sentences. No more.
+- Exactly 3 to 4 sentences. No more.
 - No dashes, em dashes, colons, semicolons, or asterisks anywhere in the output.
 - No stats, numbers, or percentages. Describe patterns and tendencies in plain language.
-- This fighter only throws hooks and straights. Never mention jabs or uppercuts.
+- Punches and hooks are general moves. Do not mention targeting specific areas.
 - Base everything on patterns across the whole fight, not single moments.
 - If they won, still identify the main habit to sharpen. If they lost, lead with what showed genuine promise.
 - Give practical actionable boxing advice the way a real gym trainer would.
@@ -86,10 +86,12 @@ function buildUserPrompt(req: AnalysisRequest): string {
   const slips = req.windows.reduce((s, w) => s + w.playerSlips, 0);
   const blocks = req.windows.reduce((s, w) => s + w.playerBlocks, 0);
   const caught = req.windows.reduce((s, w) => s + w.playerCaught, 0);
+  const jabs = req.windows.reduce((s, w) => s + w.playerJabs, 0);
   const hooks = req.windows.reduce((s, w) => s + w.playerHooks, 0);
   const straights = req.windows.reduce((s, w) => s + w.playerStraights, 0);
+  const uppers = req.windows.reduce((s, w) => s + w.playerUppercuts, 0);
   const acc = total > 0 ? Math.round((landed / total) * 100) : 0;
-  const lastHealth = req.windows.at(-1)?.playerHealth ?? 1000;
+  const lastHealth = req.windows.at(-1)?.playerHealth ?? 100;
   const skill = total < 10 || acc < 20 ? 'beginner' : acc > 40 && req.windows.length >= 4 ? 'advanced' : 'intermediate';
 
   const name = req.playerName ?? 'the fighter';
@@ -98,9 +100,9 @@ function buildUserPrompt(req: AnalysisRequest): string {
 Outcome: ${outcome} by ${req.result.reason}.
 Skill level (inferred): ${skill}
 Total punches thrown: ${total} | landed: ${landed} (${acc}%)
-Punch mix: straights ${straights}, hooks ${hooks}
+Punch mix: jabs ${jabs}, straights ${straights}, hooks ${hooks}, uppercuts ${uppers}
 Defense: ${slips} slips, ${blocks} blocks, took ${caught} hits
-Player health remaining: ${lastHealth}/1000
+Player health remaining: ${lastHealth}/100
 Bot adapted ${req.adaptationCount} times during the fight.
 Fight windows (each ~6s): ${req.windows.length}
 
