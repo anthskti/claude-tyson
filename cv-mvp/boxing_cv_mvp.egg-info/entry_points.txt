@@ -1,2 +1,0 @@
-[console_scripts]
-boxing-cv-mvp = cv_mvp.__main__:main

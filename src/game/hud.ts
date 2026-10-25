@@ -16,6 +16,7 @@ export interface HudActions {
   forfeit(): void;
   useKeyboard(): void;
   useCamera(): void;
+  useAirPods(): void;
   reconnectCamera(): void;
   cancelCalibration(): void;
   skipCalibration(): void;
@@ -36,7 +37,7 @@ export interface RingSummary {
   fighters?: string; // 'ALICE 72 · 55 BOB'
 }
 
-export type InputMode = 'keyboard' | 'camera';
+export type InputMode = 'keyboard' | 'camera' | 'airpods';
 
 export interface HudState {
   server: 'connecting' | 'online' | 'offline';
@@ -55,6 +56,7 @@ export interface HudState {
   cameraStats?: CvStats;
   /** Last CV event and the key it mapped to, e.g. "punch_left hook → U". */
   lastCv?: string;
+  motionSummary?: string;
   rings: RingSummary[];
   queueLength: number;
   /** Watching the arena instead of the menu; `watch` is the ring in view. */
@@ -156,7 +158,7 @@ export class Hud {
           telegraph ${strat.telegraphMs}ms</div>`;
     }
 
-    const paused = active && s.tracking !== 'good';
+    const paused = active && (s.tracking === 'lost' || s.tracking === 'calibrating');
     el('pause').style.display = paused ? 'flex' : 'none';
     if (paused) {
       el('pause').innerHTML = `<div><h2>${s.tracking === 'calibrating' ? 'Calibrating…' : 'Tracking lost'}</h2>
@@ -166,6 +168,12 @@ export class Hud {
   }
 
   private inputChips(s: HudState): string {
+    if (s.input === 'airpods') {
+      return `<button class="chip" data-action="useKeyboard">input: airpods ⇄</button>
+        <button class="chip ${s.camera === 'connected' ? 'online' : 'warn'}" data-action="reconnectCamera" title="Reconnect to the local harness">${escapeHtml(s.cameraDetail ?? 'Start motion companion')}</button>
+        <span class="chip">${escapeHtml(s.lastCv ?? 'AirPods: punches · Pose: dodges · no blocks')}</span>
+        <span class="chip" title="Approximate software timing only; excludes physical motion/Bluetooth. Full stage logs in browser console.">${escapeHtml(s.motionSummary ?? '')}</span>`;
+    }
     const other = s.input === 'camera' ? 'useKeyboard' : 'useCamera';
     const toggle = `<button class="chip" data-action="${other}" title="Switch input">input: ${s.input} ⇄</button>`;
     if (s.input === 'keyboard') return toggle;
@@ -178,7 +186,7 @@ export class Hud {
       ? `<span class="chip online" title="${s.cameraStats ? `${s.cameraStats.inferenceP95Ms.toFixed(1)} ms/frame p95 · pose ${s.cameraStats.poseMs?.toFixed(1)} · hands ${s.cameraStats.handsMs?.toFixed(1)} ms median` : ''}">camera: ${label}${detail}${stats}</span>`
       : s.camera === 'connecting'
         ? `<span class="chip warn">camera: ${label}${detail}</span>`
-        : `<button class="chip warn" data-action="reconnectCamera" title="${bridge ? 'Start the bridge in cv-mvp/: python -m cv_mvp --camera 0' : 'Allow camera access, then retry'}">camera: ${label}${detail} · retry</button>`;
+        : `<button class="chip warn" data-action="reconnectCamera" title="${bridge ? 'Use Camera for browser CV or AirPods for the motion companion' : 'Allow camera access, then retry'}">camera: ${label}${detail} · retry</button>`;
     const last = `<span class="chip synthetic">last cv: ${s.lastCv ? escapeHtml(s.lastCv) : '—'}</span>`;
     return toggle + camera + last;
   }
@@ -187,7 +195,7 @@ export class Hud {
     const opt = (mode: InputMode, action: keyof HudActions, label: string) =>
       `<button data-action="${action}" class="${s.input === mode ? '' : 'secondary'}">${label}</button>`;
     return `<div class="input-picker"><span class="dim">Input</span>
-      ${opt('keyboard', 'useKeyboard', 'Keyboard')}${opt('camera', 'useCamera', s.cameraSource === 'bridge' ? 'Camera (CV bridge)' : 'Camera')}</div>`;
+      ${opt('keyboard', 'useKeyboard', 'Keyboard')}${opt('camera', 'useCamera', 'Camera')}${opt('airpods', 'useAirPods', 'AirPods + camera')}<a href="/downloads/motion-companion.zip" download>Download Mac companion</a></div>`;
   }
 
   private menuHtml(s: HudState): string {
@@ -279,7 +287,7 @@ export class Hud {
     const detail = opts.detail ? ` (${escapeHtml(opts.detail)})` : '';
     const waiting = opts.camera === 'connected' ? ''
       : opts.source === 'bridge'
-        ? `<p class="warn">Waiting for the camera bridge. Start it in <code>cv-mvp/</code>: <code>python -m cv_mvp --camera 0</code></p>`
+        ? `<p class="warn">Select Camera for browser CV or AirPods for the motion companion.</p>`
         : opts.camera === 'disconnected'
           ? `<p class="warn">Camera tracking unavailable${detail}. Allow camera access and retry.</p>`
           : `<p class="warn">Starting camera tracking${detail}. The first load downloads about 20 MB.</p>`;

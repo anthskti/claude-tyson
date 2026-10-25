@@ -124,3 +124,18 @@ The strategy/schema still carries an `uppercutWeight` field for compatibility, b
 current online bot selects only the four supported straight and hook actions. There is
 no separate `BotBalance`, `PlayerStyle`, or `Analysis` table in the current module; the
 analysis text is stored on `fight_result` and the profile stores aggregate counters.
+
+## Hosted AirPod companion adapter
+
+Native motion is a local input provider for the hosted game; the reducers above are unchanged.
+`motion/` publishes contractVersion 1 `cv_sample` packets over loopback. One canonical
+`sessionId` covers pose plus both hand streams; unique native event IDs survive mapping.
+Punch classes are full anatomical names. IMU hand validity is independent of webcam
+wrist visibility; Pose determines dodge validity. AirPod guards are always neutral.
+Locally, `onsetMs` and `qualityScore` may be null (unknown physical onset / uncalibrated
+model confidence); neither is added to reducer arguments. The browser submits only
+classified events and pose state, never raw sensor vectors or landmarks. See
+[the hosted integration contract and setup](docs/HOSTED_MOTION.md).
+An optional rawImu array carries bounded fresh API readings to the same browser only.
+It is diagnostic data and must never be forwarded to reducers. Website origin and
+per-run pairing token are checked before a hosted page receives any samples.

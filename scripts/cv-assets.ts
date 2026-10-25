@@ -1,5 +1,5 @@
 // Copies the in-browser CV runtime into public/cv/ before dev and build: the MediaPipe
-// tasks-vision WASM from node_modules and the two models from cv-mvp/models, checked
+// tasks-vision WASM from node_modules and the two models from assets/mediapipe, checked
 // against their known hashes. Paths are versioned so they can be cached forever.
 // public/cv/ is generated; it is gitignored.
 
@@ -24,10 +24,10 @@ if (!existsSync(wasm)) throw new Error('Missing @mediapipe/tasks-vision; run bun
 cpSync(wasm, join(out, CV_ASSETS.wasm), { recursive: true });
 
 for (const [target, { file, sha256 }] of Object.entries(MODELS)) {
-  const bytes = readFileSync(join(root, 'cv-mvp', 'models', file));
+  const bytes = readFileSync(join(root, 'assets', 'mediapipe', file));
   const actual = createHash('sha256').update(bytes).digest('hex');
   if (actual !== sha256) throw new Error(`${file} hash ${actual} does not match ${sha256}`);
-  cpSync(join(root, 'cv-mvp', 'models', file), join(out, target));
+  cpSync(join(root, 'assets', 'mediapipe', file), join(out, target));
 }
 
 console.log(`cv assets -> public/${CV_ASSETS.root}`);
