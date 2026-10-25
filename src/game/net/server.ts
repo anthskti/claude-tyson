@@ -116,6 +116,7 @@ export class GameServer {
             live.rightSemijoin(tables.fighter, (m, f) => m.id.eq(f.matchId)),
             live.rightSemijoin(tables.attack, (m, a) => m.id.eq(a.matchId)),
             live.rightSemijoin(tables.botStrategy, (m, s) => m.id.eq(s.matchId)),
+            live.rightSemijoin(tables.fightWindow, (m, w) => m.id.eq(w.matchId)),
             shows,
             shows.rightSemijoin(tables.fighter, (m, f) => m.id.eq(f.matchId)),
             shows.rightSemijoin(tables.fightResult, (m, r) => m.id.eq(r.matchId)),
@@ -178,6 +179,7 @@ export class GameServer {
         tables.attack.where(a => a.matchId.eq(matchId)),
         tables.botStrategy.where(s => s.matchId.eq(matchId)),
         tables.fightResult.where(r => r.matchId.eq(matchId)),
+        tables.fightWindow.where(w => w.matchId.eq(matchId)),
       ]);
     this.mine = { matchId, handle };
   }

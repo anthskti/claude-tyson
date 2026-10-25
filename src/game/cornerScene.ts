@@ -26,6 +26,8 @@ export interface CornerSceneOptions {
   fetchImpl?: typeof fetch;
   /** Called when analysis text is ready to display. */
   onAnalysis?: (text: string, source: "claude" | "offline") => void;
+  /** Called when the player dismisses the corner scene (GOT IT). */
+  onExit?: () => void;
 }
 
 export class CornerScene {
@@ -271,6 +273,7 @@ export class CornerScene {
         this.bubbleEl.classList.remove("visible");
         clearTimeout(this.typewriterTimer);
         this.exit();
+        this.opts.onExit?.();
       });
     }
 

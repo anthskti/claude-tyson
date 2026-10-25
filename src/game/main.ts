@@ -19,6 +19,7 @@ import { AdaptationManager } from './adaptationManager';
 import { DebugLog } from './debugLog';
 import { FriendsPanel } from './friendsPanel';
 import { pickLine } from './dialogue';
+import { renderBotPortrait } from './vsPortrait';
 
 const PLAYER_NAME_KEY = 'claude-tyson.player-name';
 function loadPlayerName(): string | null {
@@ -227,11 +228,17 @@ const server = new GameServer({
 const hud = new Hud({
   fightBot: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
-    beforeFight(() => server.startBotMatch());
+    beforeFight(async () => {
+      const portrait = await renderBotPortrait(renderer);
+      hud.showVsScreen(hudState.playerName ?? 'YOU', portrait, () => server.startBotMatch());
+    });
   },
   findPvp: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
-    beforeFight(() => server.joinPvp());
+    beforeFight(async () => {
+      const portrait = await renderBotPortrait(renderer);
+      hud.showVsScreen(hudState.playerName ?? 'YOU', portrait, () => server.joinPvp());
+    });
   },
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),
@@ -291,6 +298,13 @@ const adaptationManager = new AdaptationManager({
 const cornerScene = new CornerScene({
   scene, camera, renderer,
   onAnalysis: (text, source) => debugLog.add('analysis', `[${source}] ${text}`),
+  onExit: () => {
+    cinematicMode = false;
+    hudState.cinematic = false;
+    hudState.debriefing = false;
+    wheel.show();
+    refresh();
+  },
 });
 
 function setSpectating(on: boolean) {

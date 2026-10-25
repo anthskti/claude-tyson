@@ -101,6 +101,7 @@ export class Hud {
       <div id="result-card" class="result-card" style="display:none"></div>
       <div id="name-entry-screen" class="name-entry-screen" style="display:none"></div>
       <div id="wii-safety-screen" class="wii-safety-screen" style="display:none"></div>
+      <div id="vs-screen" class="vs-screen" style="display:none"></div>
       <div class="keys">
         <div class="keys-title">KEYBOARD CONTROLS</div>
         <div><b>J</b> Left straight · <b>C</b> Right straight</div>
@@ -502,6 +503,41 @@ export class Hud {
     };
     screen.querySelector('.wss-btn')!.addEventListener('click', (e) => { e.stopPropagation(); done(); });
     screen.addEventListener('click', done, { once: true });
+  }
+
+  /** SF6-style VS screen shown before each fight. Auto-starts after 3.6s or click to skip. */
+  showVsScreen(playerName: string, botPortrait: string | null, onStart: () => void) {
+    const screen = el('vs-screen');
+    const playerInitials = (playerName.slice(0, 2) || 'YO').toUpperCase();
+    const botSide = botPortrait
+      ? `<img class="vss-portrait vss-portrait-bot" src="${botPortrait}" alt="Claude Tyson">`
+      : `<div class="vss-portrait vss-portrait-bot vss-portrait-initials">CT</div>`;
+    screen.innerHTML = `
+      <div class="vss-scanlines"></div>
+      <div class="vss-fighters">
+        <div class="vss-side vss-side-player">
+          <div class="vss-portrait vss-portrait-initials vss-portrait-player">${escapeHtml(playerInitials)}</div>
+          <div class="vss-name">${escapeHtml(playerName.toUpperCase())}</div>
+        </div>
+        <div class="vss-center">
+          <div class="vss-clash-line"></div>
+          <div class="vss-vs">VS</div>
+        </div>
+        <div class="vss-side vss-side-bot">
+          ${botSide}
+          <div class="vss-name">CLAUDE TYSON</div>
+        </div>
+      </div>
+      <div class="vss-skip">TAP TO SKIP</div>`;
+    screen.style.display = 'flex';
+    screen.classList.remove('vss-out');
+    const start = () => {
+      clearTimeout(timer);
+      screen.classList.add('vss-out');
+      window.setTimeout(() => { screen.style.display = 'none'; screen.classList.remove('vss-out'); onStart(); }, 350);
+    };
+    const timer = window.setTimeout(start, 3600);
+    screen.addEventListener('click', start, { once: true });
   }
 
   toast(text: string, kind: 'good' | 'bad' | 'info' = 'info') {
