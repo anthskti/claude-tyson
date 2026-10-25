@@ -40,7 +40,7 @@ import {
 // ─── Tuning ────────────────────────────────────────────────────────────────
 
 const MAX_HEALTH = 100;
-const ROUND_MS = 30_000;
+const ROUND_MS = 60_000;
 const POSE_FRESH_MS = 250;
 const DODGE_WINDOW_MS = 350;
 const DODGE_STARTUP_MS = 100;
@@ -1069,22 +1069,24 @@ export const endRound = spacetimedb.reducer(
   }
 );
 
-// Keeps the arena alive: a bot exhibition in a spare ring while someone is online to
-// watch, plus queue pairing as a backstop.
+// Keeps the arena alive: fill ALL spare rings with bot exhibitions while someone is online.
+// Real fights preempt exhibitions via claimRing; PvP queue gets priority over new exhibitions.
 export const arenaTick = spacetimedb.reducer(
   { onSchedule: arenaTimer },
   { timer: arenaTimer.rowType },
   ctx => {
     pairQueue(ctx);
-    if (activeMatches(ctx).some(m => m.mode === 'exhibition')) return;
-    // Let the last exhibition's result show before the next one starts.
+    // Let finished exhibitions clear before starting fresh ones.
     if ([...ctx.db.exhibitionCleanup.iter()].length > 0) return;
-    // Players queued for PvP get the last ring before the bots do.
-    const free = freeRings(ctx);
-    if (free.length === 0 || [...ctx.db.queueEntry.iter()].length > 0) return;
     if (![...ctx.db.player.iter()].some(p => p.online)) return;
-    // The highest free ring, so real fights fill from the first ring up.
-    createMatch(ctx, 'exhibition', free[free.length - 1], undefined, undefined);
+    // PvP queue entries get rings when matched; don't start new exhibitions meanwhile.
+    if ([...ctx.db.queueEntry.iter()].length > 0) return;
+    const free = freeRings(ctx);
+    if (free.length === 0) return;
+    // Fill every free ring with an exhibition (real fights preempt via claimRing).
+    for (const ring of free) {
+      createMatch(ctx, 'exhibition', ring, undefined, undefined);
+    }
   }
 );
 

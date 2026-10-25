@@ -16,6 +16,8 @@ import { Hud, type HudState, type InputMode, type RingSummary } from './hud';
 import { MahoragasWheel } from './scene/mahoragasWheel';
 import { CornerScene } from './cornerScene';
 import { AdaptationManager } from './adaptationManager';
+import { DebugLog } from './debugLog';
+import { FriendsPanel } from './friendsPanel';
 import { pickLine } from './dialogue';
 
 const PLAYER_NAME_KEY = 'claude-tyson.player-name';
@@ -68,15 +70,65 @@ camera.add(gloves.root);
 const opponent = new Boxer();
 firstPerson.add(opponent.root);
 
-// Spectator camera: a slow orbit outside the ropes of the watched ring.
-const ORBIT_RADIUS_M = 9.5;
-const ORBIT_HEIGHT_M = 5;
-const ORBIT_RAD_PER_S = 0.12;
-let orbitAngle = 0.6;
+// ─── Cinematic home-screen camera ──────────────────────────────────────────
+// Multi-shot sequence: each shot slowly drifts between two positions,
+// then cross-fades to the next. Rings sit in a 2×2 grid; when focus=ring0
+// they occupy (0,0,0), (16,0,0), (0,0,16), (16,0,16).
+interface CinematicShot {
+  startPos: THREE.Vector3;
+  endPos:   THREE.Vector3;
+  lookAt:   THREE.Vector3;
+  fov:      number;
+  duration: number; // seconds
+}
+const CINEMATIC_SHOTS: CinematicShot[] = [
+  // 1 – Epic overhead: all four rings visible
+  { startPos: new THREE.Vector3(8, 28, 20), endPos: new THREE.Vector3(8, 22, 12),
+    lookAt: new THREE.Vector3(8, 0, 8), fov: 52, duration: 10 },
+  // 2 – Ringside low: looking up into ring 0
+  { startPos: new THREE.Vector3(-3, 2.2, -8), endPos: new THREE.Vector3(0, 1.8, -4),
+    lookAt: new THREE.Vector3(0, 1.6, 0), fov: 68, duration: 8 },
+  // 3 – Far corner diagonal: ring 3 (16,0,16) and beyond
+  { startPos: new THREE.Vector3(26, 7, 26), endPos: new THREE.Vector3(22, 5.5, 22),
+    lookAt: new THREE.Vector3(8, 0, 8), fov: 60, duration: 9 },
+  // 4 – Side tracking past ring 1 (16,0,0)
+  { startPos: new THREE.Vector3(24, 4, -10), endPos: new THREE.Vector3(24, 3.5, 6),
+    lookAt: new THREE.Vector3(16, 1.2, 0), fov: 62, duration: 8 },
+  // 5 – Inside-the-action: low angle between rings 0 and 2
+  { startPos: new THREE.Vector3(-4, 1.6, 4), endPos: new THREE.Vector3(-2, 2.4, 10),
+    lookAt: new THREE.Vector3(4, 1.4, 8), fov: 72, duration: 9 },
+];
+const CINEMATIC_BLEND_S = 1.2; // cross-fade duration
+let cinShotIdx = 0;
+let cinShotT = 0;   // progress within current shot [0..1]
+let cinBlendT = -1; // ≥0 while blending out (-1 = not blending)
+const cinCamA = new THREE.PerspectiveCamera(60, 1, 0.03, 150);
+const cinCamB = new THREE.PerspectiveCamera(60, 1, 0.03, 150);
+const cinTarget = document.createElement('canvas'); // off-screen target for blend
+cinTarget.style.display = 'none';
+
+function cinStep(dt: number) {
+  const shot = CINEMATIC_SHOTS[cinShotIdx];
+  cinShotT = Math.min(1, cinShotT + dt / shot.duration);
+
+  // Ease: slow in + slow out (smoothstep)
+  const ease = cinShotT * cinShotT * (3 - 2 * cinShotT);
+  const pos = new THREE.Vector3().lerpVectors(shot.startPos, shot.endPos, ease);
+  camera.position.copy(pos);
+  camera.lookAt(shot.lookAt);
+  camera.fov = shot.fov;
+  camera.updateProjectionMatrix();
+
+  if (cinShotT >= 1) {
+    cinShotIdx = (cinShotIdx + 1) % CINEMATIC_SHOTS.length;
+    cinShotT = 0;
+  }
+}
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -126,8 +178,11 @@ const server = new GameServer({
   },
   onChange: markDirty,
   onError: message => hud.toast(message, 'bad'),
-  onFightWindow(window, strategy) {
-    adaptationManager.onWindow(window, strategy);
+  onFightWindow(fw, strategy) {
+    adaptationManager.onWindow(fw, strategy);
+    const att = fw.playerJabs + fw.playerStraights + fw.playerHooks +
+      fw.playerUppercuts + ((fw as any).playerUnclassified || 0);
+    debugLog.add('window', `W#${fw.id} +${fw.playerLanded}/${att} bot${fw.botHealth}hp trk=${(fw.trackingCoverage * 100).toFixed(0)}%`);
   },
   onRingAttack: atk => arena.attack(atk),
   onRingAttackResolved: atk => arena.resolved(atk),
@@ -206,6 +261,9 @@ const hud = new Hud({
   },
 });
 
+const debugLog = new DebugLog();
+new FriendsPanel((msg, kind) => hud.toast(msg, kind));
+
 const adaptationManager = new AdaptationManager({
   server,
   requestStrategist: async (req) => {
@@ -221,12 +279,19 @@ const adaptationManager = new AdaptationManager({
     wheel.clank();
     hud.showAdaptedTag(explanation);
     hud.showDialogue(pickLine('adaptation'));
+    debugLog.add('strategy', `ADAPTED: ${explanation}`);
   },
-  onAdaptation: (outcome, explanation) => hud.showAdaptation(outcome, explanation),
-  log: (msg) => console.log('[adaptation]', msg),
+  onAdaptation: (outcome, explanation) => {
+    hud.showAdaptation(outcome, explanation);
+    debugLog.add('outcome', `${outcome === 'improved' ? 'KEPT' : 'REVERSED'}: ${explanation}`);
+  },
+  log: (msg) => { console.log('[adaptation]', msg); debugLog.add('strategy', msg); },
 });
 
-const cornerScene = new CornerScene({ scene, camera, renderer });
+const cornerScene = new CornerScene({
+  scene, camera, renderer,
+  onAnalysis: (text, source) => debugLog.add('analysis', `[${source}] ${text}`),
+});
 
 function setSpectating(on: boolean) {
   hudState.spectating = on;
@@ -244,7 +309,7 @@ function summarize(r: RingView): RingSummary {
   const m = r.match;
   if (!m) return { ring: r.ring, free: true, label: 'Empty' };
   const [red, blue] = r.fighters;
-  const hp = (f: typeof red) => (f ? Math.max(0, Math.round(f.health / 10)) : 0);
+  const hp = (f: typeof red) => (f ? Math.max(0, Math.round(f.health)) : 0);
   const result = m.status === 'active' ? '' : ' · ended';
   return {
     ring: r.ring,
@@ -310,7 +375,7 @@ function refresh() {
     const reason = hudState.result?.reason ?? 'time';
     hud.showDialogue(pickLine(won ? 'fight_end_win' : 'fight_end_lose'));
     if (view && !cinematicMode) {
-      const stars = won ? (view.me.health >= 700 ? 3 : view.me.health >= 350 ? 2 : 1) : 0;
+      const stars = won ? (view.me.health >= 70 ? 3 : view.me.health >= 35 ? 2 : 1) : 0;
       hud.showResultCard(won, reason, stars);
       hudState.debriefing = true;
       const snap = view;
@@ -494,7 +559,7 @@ cv.start((obs, events) => {
     if (ev.type === 'punch_left') gloves.punch('left', type);
     if (ev.type === 'punch_right') gloves.punch('right', type);
   }
-  hud.renderPose(myPose);
+  hud.renderPose(myPose, view?.match.status === 'active');
 
   if (view?.match.status === 'active') server.forwardCv(view.match.id, obs, events);
   if (trackingChanged) refresh();
@@ -534,9 +599,7 @@ renderer.setAnimationLoop(() => {
   arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
   arena.update(dt, Date.now());
   if (!fp) {
-    orbitAngle += dt * ORBIT_RAD_PER_S;
-    camera.position.set(Math.sin(orbitAngle) * ORBIT_RADIUS_M, ORBIT_HEIGHT_M, Math.cos(orbitAngle) * ORBIT_RADIUS_M);
-    camera.lookAt(0, 1.1, 0);
+    cinStep(dt);
     hud.tick(watchedView());
     renderer.render(scene, camera);
     return;
@@ -581,6 +644,9 @@ renderer.setAnimationLoop(() => {
   hud.tick(view);
   renderer.render(scene, camera);
 });
+
+// Backtick toggles AI transparency log
+window.addEventListener('keydown', (e) => { if (e.key === '`') debugLog.toggle(); });
 
 return () => {
   alive = false;

@@ -24,6 +24,8 @@ export interface CornerSceneOptions {
   renderer: THREE.WebGLRenderer;
   analysisUrl?: string; // default "/api/analysis"
   fetchImpl?: typeof fetch;
+  /** Called when analysis text is ready to display. */
+  onAnalysis?: (text: string, source: "claude" | "offline") => void;
 }
 
 export class CornerScene {
@@ -248,6 +250,7 @@ export class CornerScene {
 
   /** Show the analysis speech bubble (fixed bottom-center) with typewriter text. */
   showAnalysisBubble(text: string, source: "claude" | "offline"): void {
+    this.opts.onAnalysis?.(text, source);
     const headerLabel = source === "claude" ? "CLAUDE CRAB" : "CORNER NOTES";
 
     this.bubbleEl.innerHTML = `
@@ -407,12 +410,13 @@ export class CornerScene {
     };
 
     const deliver = (text: string, source: "claude" | "offline") => {
-      if (!this.analysisFired && !this.animating && this.active) {
-        // Camera already settled, show after dramatic pause
+      if (this.analysisFired || !this.active) return; // already shown or scene exited
+      if (!this.animating) {
+        // Camera already settled — show immediately after dramatic pause
         this.analysisFired = true;
         window.setTimeout(() => this.showAnalysisBubble(text, source), 300);
       } else {
-        // Store for when the camera animation finishes
+        // Camera still moving — store for when animation ends
         this.pendingAnalysis = { text, source };
       }
     };

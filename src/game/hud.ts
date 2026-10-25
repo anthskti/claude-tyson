@@ -1,7 +1,6 @@
 import type { PoseState, TrackingState } from './cv/contract';
 import type { CvSourceKind, CvStats, CvStatus } from './cv/input';
 import type { CalibrationView } from './cv/guard';
-import { RULES_HTML } from './combatText';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
 
 const MAX_STAMINA = 200;
@@ -137,12 +136,17 @@ export class Hud {
   render(s: HudState) {
     const active = s.view?.match.status === 'active';
     const keys = this.root.querySelector<HTMLElement>('.keys');
-    if (keys) keys.style.display = s.input === 'keyboard' ? 'block' : 'none';
+    if (keys) keys.style.display = (s.input === 'keyboard' && active) ? 'block' : 'none';
 
-    this.setHtml('status', `
-      <span class="chip ${s.server}">server: ${s.server}</span>
-      <span class="chip ${s.tracking === 'good' ? 'online' : 'warn'}">cv: ${s.tracking}</span>
-      ${this.inputChips(s)}`);
+    // Status chips only visible during a fight
+    const status = el('status');
+    status.style.display = active ? 'flex' : 'none';
+    if (active) {
+      this.setHtml('status', `
+        <span class="chip ${s.server}">server: ${s.server}</span>
+        <span class="chip ${s.tracking === 'good' ? 'online' : 'warn'}">cv: ${s.tracking}</span>
+        ${this.inputChips(s)}`);
+    }
 
     el('me-name').textContent = s.names[0];
     el('opp-name').textContent = s.names[1];
@@ -222,22 +226,21 @@ export class Hud {
         </div>`
       : '';
     const name = s.playerName ?? 'FIGHTER';
-    const nameHtml = `<div class="menu-player-name">${escapeHtml(name)} <button class="profile-change-name" data-action="changeName">change</button></div>`;
+    const nameHtml = `<div class="menu-player-name">${escapeHtml(name)} <button class="profile-change-name" data-action="changeName">change name</button></div>`;
     return `
-      <h1>CLAUDE TYSON</h1>
-      ${nameHtml}
+      <div class="menu-title"><span class="t-claude">CLAUDE</span><span class="t-tyson">TYSON</span></div>
       ${resultHtml}
       ${this.inputPicker(s)}
       <div class="buttons">
         <button data-action="fightBot" ${offline || full ? 'disabled' : ''} ${full ? 'title="Every ring is taken. Spectate, or queue for PvP."' : ''}>Fight Claude Tyson</button>
         ${s.queued
           ? `<button data-action="cancelPvp" class="secondary">${full ? 'Waiting for a free ring' : 'Waiting for opponent'}… cancel</button>`
-          : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP match</button>`}
+          : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP</button>`}
         <button data-action="spectate" class="secondary" ${offline ? 'disabled' : ''}>Spectate</button>
       </div>
-      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module. You can still shadowbox.</div>` : this.ringsHtml(s, full)}
-      ${RULES_HTML}
-      ${profileHtml}`;
+      ${offline ? `<div class="dim">Server ${s.server}${s.serverDetail ? ` (${escapeHtml(s.serverDetail)})` : ''}. Run <code>spacetime start</code> and publish the module.</div>` : this.ringsHtml(s, full)}
+      ${profileHtml}
+      ${nameHtml}`;
   }
 
   private ringsHtml(s: HudState, full: boolean): string {
@@ -263,11 +266,15 @@ export class Hud {
   /** Pass the watched ring as a MatchView (red as `me`) while spectating. */
   tick(view: MatchView | undefined) {
     const active = view?.match.status === 'active';
-    el('hp-me').style.width = `${view ? Math.max(0, view.me.health / 10) : 100}%`;
-    el('hp-opp').style.width = `${view ? Math.max(0, view.opponent.health / 10) : 100}%`;
-    el('stamina-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.stamina / MAX_STAMINA * 100)) : 100}%`;
-    el('stamina-opp').style.width = `${view ? Math.max(0, Math.min(100, view.opponent.stamina / MAX_STAMINA * 100)) : 100}%`;
-    let remaining = 30;
+    const bars = document.querySelector<HTMLElement>('.bars');
+    if (bars) bars.style.display = active ? 'flex' : 'none';
+    if (active) {
+      el('hp-me').style.width = `${Math.max(0, view!.me.health)}%`;
+      el('hp-opp').style.width = `${Math.max(0, view!.opponent.health)}%`;
+      el('stamina-me').style.width = `${Math.max(0, Math.min(100, view!.me.stamina / MAX_STAMINA * 100))}%`;
+      el('stamina-opp').style.width = `${Math.max(0, Math.min(100, view!.opponent.stamina / MAX_STAMINA * 100))}%`;
+    }
+    let remaining = 60;
     if (active) {
       const endsMs = Number(view.match.endsAt.microsSinceUnixEpoch / 1000n);
       remaining = Math.max(0, Math.ceil((endsMs - Date.now()) / 1000));
@@ -275,10 +282,13 @@ export class Hud {
     el('timer').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
   }
 
-  renderPose(pose: PoseState) {
+  renderPose(pose: PoseState, active = false) {
+    const p = el('pose');
+    if (!active) { p.style.display = 'none'; return; }
+    p.style.display = '';
     const body = { neutral: 'NEUTRAL', lean_left: '◀ DODGE LEFT', lean_right: 'DODGE RIGHT ▶' }[pose.body];
     const g = (on: boolean) => (on ? 'BLOCK' : '—');
-    el('pose').innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}${pose.guards.left !== pose.guards.right ? ' · both gloves to block' : ''}</span>`;
+    p.innerHTML = `<span>${body}</span><span class="dim">guard L ${g(pose.guards.left === 'block')} · R ${g(pose.guards.right === 'block')}${pose.guards.left !== pose.guards.right ? ' · both gloves to block' : ''}</span>`;
   }
 
   /** Pre-match camera calibration overlay; pass undefined to hide it. */
@@ -421,11 +431,11 @@ export class Hud {
   showNameEntry(onSubmit: (name: string) => void) {
     const screen = el('name-entry-screen');
     screen.innerHTML = `
-      <div class="ne-logo">CLAUDE TYSON</div>
-      <div class="ne-prompt">WHAT'S YOUR NAME,<br>FIGHTER?</div>
-      <input class="ne-input" type="text" placeholder="ENTER NAME" maxlength="16"
+      <div class="ne-logo">🥊 CLAUDE TYSON</div>
+      <div class="ne-prompt">WHAT'S YOUR<br>FIGHTER NAME?</div>
+      <input class="ne-input" type="text" placeholder="YOUR NAME" maxlength="16"
              autocomplete="off" spellcheck="false">
-      <button class="ne-btn" disabled>LET'S GO</button>`;
+      <button class="ne-btn" disabled>STEP INTO THE RING</button>`;
     screen.style.display = 'flex';
     screen.classList.remove('ne-fade-out');
     const input = screen.querySelector<HTMLInputElement>('.ne-input')!;

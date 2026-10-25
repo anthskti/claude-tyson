@@ -1,12 +1,22 @@
 :root {
   --fg: #f2f2f2;
+  --fg-dim: rgba(242, 242, 242, 0.5);
   --dim: #9aa3b2;
   --panel: rgba(10, 12, 18, 0.72);
   --red: #e74c3c;
+  --red-dark: #aa1a0a;
   --blue: #3498db;
   --good: #2ecc71;
   --warn: #f1c40f;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --gold: #ffc820;
+  --gold-dark: #a87600;
+  --gold-glow: rgba(255, 200, 32, 0.55);
+  --orange: #ff8c42;
+  --navy: #0b1829;
+  --navy-panel: rgba(11, 24, 41, 0.94);
+  --purple-light: #c480ff;
+  --purple-glow: rgba(180, 100, 255, 0.45);
+  font-family: 'Nunito', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--fg);
 }
 
@@ -40,15 +50,62 @@ button.chip:hover { border-color: rgba(255,255,255,0.5); }
 
 .menu {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 16px; background: radial-gradient(ellipse at center, rgba(7,8,12,0.55), rgba(7,8,12,0.9)); text-align: center; padding: 16px;
+  gap: 14px;
+  background: radial-gradient(ellipse at 50% 60%, rgba(4,5,10,0.45) 0%, rgba(4,5,10,0.82) 65%, rgba(4,5,10,0.97) 100%);
+  text-align: center; padding: 16px;
 }
-.menu h1 { margin: 0; font-size: clamp(36px, 8vw, 72px); letter-spacing: 0.06em; font-weight: 900; }
+.menu h1 {
+  margin: 0; font-family: 'Lilita One', cursive;
+  font-size: clamp(44px, 9vw, 88px); font-weight: 400;
+  letter-spacing: 0.06em; line-height: 0.95;
+  color: var(--gold);
+  -webkit-text-stroke: 3px rgba(0,0,0,0.8);
+  text-shadow: 0 5px 0 var(--gold-dark), 0 10px 0 rgba(0,0,0,0.45), 0 0 60px var(--gold-glow);
+  paint-order: stroke fill;
+}
+.menu-title {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  line-height: 0.88; margin-bottom: 4px;
+}
+.t-claude {
+  font-family: 'Lilita One', cursive; font-weight: 400;
+  font-size: clamp(52px, 11vw, 104px); letter-spacing: 0.1em;
+  color: var(--gold);
+  -webkit-text-stroke: 3px rgba(0,0,0,0.85);
+  text-shadow: 0 5px 0 var(--gold-dark), 0 10px 0 rgba(0,0,0,0.5), 0 0 70px var(--gold-glow);
+  paint-order: stroke fill;
+}
+.t-tyson {
+  font-family: 'Lilita One', cursive; font-weight: 400;
+  font-size: clamp(64px, 14vw, 128px); letter-spacing: 0.06em;
+  color: #fff;
+  -webkit-text-stroke: 4px rgba(0,0,0,0.9);
+  text-shadow: 0 6px 0 rgba(80,0,0,0.9), 0 12px 0 rgba(0,0,0,0.5), 0 0 60px rgba(220,40,10,0.45);
+  paint-order: stroke fill;
+}
 .menu .buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .menu button {
-  font: inherit; font-weight: 700; padding: 12px 22px; border-radius: 6px; border: 0; cursor: pointer;
-  background: var(--red); color: white;
+  font-family: 'Lilita One', cursive; font-size: 15px; font-weight: 400;
+  padding: 10px 24px 12px; border-radius: 10px;
+  border: 2.5px solid rgba(255,255,255,0.18);
+  border-bottom: 5px solid rgba(0,0,0,0.55);
+  cursor: pointer;
+  background: linear-gradient(to bottom, #ff6a28 0%, #c83800 100%);
+  color: #fff;
+  -webkit-text-stroke: 0.8px rgba(0,0,0,0.4); paint-order: stroke fill;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2);
+  transition: filter 0.1s, transform 0.1s, border-bottom-width 0.08s;
 }
-.menu button.secondary { background: transparent; border: 1px solid var(--fg); color: var(--fg); }
+.menu button:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.menu button:active { transform: translateY(2px); border-bottom-width: 2px; }
+.menu button.secondary {
+  background: transparent;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-bottom: 4px solid rgba(0,0,0,0.45);
+  color: var(--fg);
+  -webkit-text-stroke: 0;
+}
 .menu button:disabled { opacity: 0.4; cursor: not-allowed; }
 .menu .result h2 { margin: 0; font-size: 32px; }
 .menu .result p { max-width: 520px; color: var(--dim); }
@@ -397,6 +454,224 @@ code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; 
 }
 #ai-log-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FRIENDS PANEL — Fortnite-style slide-in from right
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Toggle button ──────────────────────────────────────────────────────── */
+#friends-toggle-btn {
+  position: fixed; bottom: 62px; right: 14px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 13px 10px;
+  background: var(--navy-panel);
+  border: 2px solid rgba(0, 230, 118, 0.45);
+  border-bottom: 4px solid rgba(0,0,0,0.65);
+  border-radius: 10px; cursor: pointer; z-index: 49; pointer-events: auto;
+  color: #00e676;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.55), 0 0 12px rgba(0,230,118,0.1);
+  transition: filter 0.1s, transform 0.1s, border-color 0.15s;
+}
+#friends-toggle-btn:hover { filter: brightness(1.15); transform: translateY(-1px); border-color: rgba(0,230,118,0.7); }
+
+.fp-btn-icon { width: 15px; height: 15px; stroke: currentColor; flex-shrink: 0; }
+.fp-btn-label {
+  font-family: 'Lilita One', cursive; font-size: 10px;
+  letter-spacing: 0.1em; color: #00e676;
+  -webkit-text-stroke: 0.4px rgba(0,0,0,0.5);
+}
+.fp-btn-count {
+  font-family: 'Lilita One', cursive; font-size: 11px; letter-spacing: 0.06em;
+  background: rgba(0,230,118,0.18); border: 1px solid rgba(0,230,118,0.4);
+  color: #00e676; border-radius: 10px; padding: 1px 6px; min-width: 18px;
+  text-align: center; line-height: 1.4;
+}
+
+/* ─── Panel ──────────────────────────────────────────────────────────────── */
+#friends-panel {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(340px, 92vw);
+  background: rgba(7, 11, 22, 0.97);
+  border-left: 2px solid rgba(255,200,32,0.18);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 300; pointer-events: auto;
+  backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: -8px 0 40px rgba(0,0,0,0.7);
+}
+#friends-panel.fp-open { transform: translateX(0); }
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+.fp-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 14px 13px;
+  background: rgba(0,0,0,0.4);
+  border-bottom: 2px solid rgba(255,200,32,0.14);
+  flex-shrink: 0;
+}
+.fp-header-left { display: flex; align-items: center; gap: 8px; }
+.fp-header-glyph { font-size: 20px; line-height: 1; }
+.fp-header-title {
+  font-family: 'Lilita One', cursive; font-size: 14px;
+  letter-spacing: 0.14em; color: #fff;
+  -webkit-text-stroke: 0.5px rgba(0,0,0,0.6);
+}
+.fp-header-badge {
+  font-family: 'Nunito', sans-serif; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  background: rgba(0,230,118,0.14); border: 1px solid rgba(0,230,118,0.35);
+  color: #00e676; border-radius: 10px; padding: 2px 8px;
+}
+.fp-close-btn {
+  background: none; border: none; color: rgba(255,255,255,0.28);
+  cursor: pointer; font-size: 17px; line-height: 1;
+  transition: color 0.14s; padding: 2px 4px;
+}
+.fp-close-btn:hover { color: #fff; }
+
+/* ─── Search bar ─────────────────────────────────────────────────────────── */
+.fp-search-row {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.fp-search {
+  width: 100%; padding: 7px 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 8px; color: #fff;
+  font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.04em; outline: none;
+  transition: border-color 0.18s, background 0.18s;
+  box-sizing: border-box;
+}
+.fp-search::placeholder { color: rgba(255,255,255,0.22); }
+.fp-search:focus {
+  border-color: rgba(255,200,32,0.5);
+  background: rgba(255,200,32,0.05);
+}
+
+/* ─── Scrollable body ────────────────────────────────────────────────────── */
+.fp-body { flex: 1; overflow-y: auto; padding-bottom: 6px; }
+.fp-body::-webkit-scrollbar { width: 4px; }
+.fp-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+/* ─── Section headers ────────────────────────────────────────────────────── */
+.fp-section-header {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 14px 5px;
+  font-family: 'Nunito', sans-serif; font-size: 10px; font-weight: 800;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+.fp-sec-online  { color: #00e676; }
+.fp-sec-ingame  { color: #ffc820; padding-top: 14px; }
+.fp-sec-offline { color: rgba(255,255,255,0.25); padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.05); }
+
+/* ─── Status dots in section headers ────────────────────────────────────── */
+.fp-sec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.fp-sec-dot.fp-dot-online  { background: #00e676; box-shadow: 0 0 5px rgba(0,230,118,0.8); }
+.fp-sec-dot.fp-dot-ingame  { background: #ffc820; box-shadow: 0 0 5px rgba(255,200,32,0.7); animation: fp-pulse 1.6s ease-in-out infinite; }
+.fp-sec-dot.fp-dot-offline { background: rgba(255,255,255,0.2); }
+@keyframes fp-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+/* ─── Friend rows ─────────────────────────────────────────────────────────  */
+.fp-row {
+  position: relative; display: flex; align-items: center;
+  gap: 10px; padding: 9px 14px;
+  cursor: default; transition: background 0.12s;
+}
+.fp-row:hover { background: rgba(255,255,255,0.05); }
+.fp-row:hover .fp-actions {
+  opacity: 1; pointer-events: auto; transform: translateX(0);
+}
+.fp-row-offline { opacity: 0.52; }
+.fp-row-offline:hover { opacity: 0.78; }
+
+/* ─── Avatar circle ──────────────────────────────────────────────────────── */
+.fp-avatar {
+  position: relative; width: 36px; height: 36px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 16px;
+}
+.fp-avatar-online  { background: rgba(0,230,118,0.14); border: 2px solid rgba(0,230,118,0.45); }
+.fp-avatar-ingame  { background: rgba(255,200,32,0.14); border: 2px solid rgba(255,200,32,0.5); }
+.fp-avatar-offline { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.12); }
+
+/* Status indicator dot (bottom-right of avatar) */
+.fp-status-indicator {
+  position: absolute; bottom: 1px; right: 1px;
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid rgba(7,11,22,0.97);
+}
+.fp-ind-online  { background: #00e676; box-shadow: 0 0 6px rgba(0,230,118,0.9); }
+.fp-ind-ingame  { background: #ffc820; box-shadow: 0 0 6px rgba(255,200,32,0.8); animation: fp-pulse 1.6s ease-in-out infinite; }
+.fp-ind-offline { background: rgba(255,255,255,0.25); }
+
+/* ─── Info column ─────────────────────────────────────────────────────────  */
+.fp-info { flex: 1; min-width: 0; }
+.fp-name {
+  font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 900;
+  letter-spacing: 0.04em; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fp-row-offline .fp-name { color: rgba(255,255,255,0.5); }
+
+.fp-activity {
+  font-family: 'Nunito', sans-serif; font-size: 10px; font-weight: 700;
+  color: rgba(255,255,255,0.38); letter-spacing: 0.02em;
+  margin-top: 1px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+}
+.fp-row-ingame .fp-activity { color: rgba(255,200,32,0.75); }
+
+.fp-detail-badge {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.08em;
+  background: rgba(255,100,0,0.22); color: rgba(255,160,60,0.95);
+  border: 1px solid rgba(255,120,0,0.35); border-radius: 4px;
+  padding: 1px 5px; line-height: 1.6; text-transform: uppercase;
+}
+
+.fp-record {
+  font-family: 'Nunito', sans-serif; font-size: 9px; font-weight: 700;
+  color: rgba(255,255,255,0.22); letter-spacing: 0.03em; margin-top: 2px;
+}
+.fp-row-ingame .fp-record { color: rgba(255,200,32,0.35); }
+
+/* ─── Hover action buttons ────────────────────────────────────────────────  */
+.fp-actions {
+  display: flex; flex-direction: column; gap: 4px;
+  opacity: 0; pointer-events: none;
+  transform: translateX(8px);
+  transition: opacity 0.14s, transform 0.14s;
+  flex-shrink: 0;
+}
+.fp-action-btn {
+  padding: 4px 9px; border-radius: 6px; border: none;
+  cursor: pointer; font-family: 'Lilita One', cursive;
+  font-size: 8.5px; letter-spacing: 0.08em; white-space: nowrap;
+  transition: filter 0.1s, transform 0.08s;
+  -webkit-text-stroke: 0.3px rgba(0,0,0,0.5);
+}
+.fp-action-btn:hover { filter: brightness(1.18); transform: translateY(-1px); }
+.fp-action-btn:active { transform: translateY(1px); }
+
+.fp-action-primary   { background: linear-gradient(180deg,#ff9a1a,#e06000); color:#fff; border-bottom:2px solid #a04000; }
+.fp-action-secondary { background: rgba(255,255,255,0.09); color:rgba(255,255,255,0.65); border:1px solid rgba(255,255,255,0.14); }
+.fp-action-watch     { background: linear-gradient(180deg,#3aa8ff,#0060cc); color:#fff; border-bottom:2px solid #003a88; }
+.fp-action-challenge { background: linear-gradient(180deg,#cc55ff,#8800cc); color:#fff; border-bottom:2px solid #55008a; }
+.fp-action-muted     { background: rgba(255,255,255,0.05); color:rgba(255,255,255,0.28); border:1px solid rgba(255,255,255,0.07); }
+
+/* ─── Footer ──────────────────────────────────────────────────────────────  */
+.fp-footer {
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.fp-footer-note {
+  font-family: 'Nunito', sans-serif; font-size: 9px; font-weight: 700;
+  color: rgba(255,255,255,0.18); letter-spacing: 0.06em; text-align: center;
+}
+
 /* ─── Wii-style Claude crab analysis bubble ─────────────────────────────── */
 /* ─── Wii-style Claude crab analysis bubble — fixed bottom-center panel ─── */
 .wii-crab-bubble {
@@ -498,6 +773,66 @@ code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; 
 }
 #name-entry-screen.ne-fade-out { animation: ne-out 0.38s ease-in both; }
 @keyframes ne-in  { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:none; } }
+@keyframes ne-out { from { opacity:1; transform:none; } to { opacity:0; transform:scale(1.04); } }
+
+/* ─── Name entry inner elements ──────────────────────────────────────────── */
+.ne-logo {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(28px, 6vw, 52px);
+  letter-spacing: 0.12em;
+  background: linear-gradient(180deg, #ffd04a 0%, #ff8c00 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  margin-bottom: 32px;
+}
+.ne-prompt {
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(22px, 4vw, 38px);
+  color: #fff;
+  text-align: center;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  margin-bottom: 36px;
+  text-shadow: 0 3px 18px rgba(0,0,0,0.7);
+}
+.ne-input {
+  width: min(340px, 80vw);
+  padding: 16px 24px;
+  background: rgba(255,255,255,0.07);
+  border: 2px solid rgba(255,200,32,0.35);
+  border-radius: 14px;
+  color: #ffc820;
+  font-family: 'Lilita One', cursive;
+  font-size: 26px;
+  letter-spacing: 0.18em;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  margin-bottom: 20px;
+}
+.ne-input::placeholder { color: rgba(255,200,32,0.28); }
+.ne-input:focus {
+  border-color: #ffc820;
+  background: rgba(255,200,32,0.08);
+  box-shadow: 0 0 0 4px rgba(255,200,32,0.18), 0 4px 24px rgba(0,0,0,0.5);
+}
+.ne-btn {
+  width: min(340px, 80vw);
+  padding: 16px 0;
+  background: linear-gradient(180deg, #ff9a1a 0%, #e06000 100%);
+  border: none; border-bottom: 4px solid #a04000;
+  border-radius: 14px;
+  color: #fff;
+  font-family: 'Lilita One', cursive;
+  font-size: 22px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: filter 0.12s, transform 0.08s, border-bottom-width 0.08s;
+  box-shadow: 0 6px 28px rgba(255,100,0,0.35);
+}
+.ne-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-2px); }
+.ne-btn:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 1px; }
+.ne-btn:disabled { opacity: 0.38; cursor: default; }
 
 /* ─── Player name in menu + change name ──────────────────────────────────── */
 .menu-player-name {
