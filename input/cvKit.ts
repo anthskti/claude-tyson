@@ -6,9 +6,8 @@
 // So the player's capabilities are ["punch_coarse", "dodge", "lean"]; no guard, no punch types.
 
 import type { Input } from "../engine/engine";
-import type { Capability } from "../shared/contracts";
+import { enginePunchForStraight } from "./straights";
 
-export const CV_KIT_CAPABILITIES: Capability[] = ["punch_coarse", "dodge", "lean"];
 
 // Field names exactly as documented; unknown extra fields are tolerated.
 export interface CvObservation {
@@ -125,8 +124,8 @@ export class CvKitAdapter {
       if (this.seen.has(key)) continue; // dedupe (sessionId, eventId)
       this.seen.add(key);
       if (e.calibrationId !== undefined && e.calibrationId !== this.calibration) continue; // old baseline
-      if (e.type === "punch_left" && obs.validity.punch_left) out.push({ who: "player", kind: "punch", punch: "jab", eventId: key });
-      else if (e.type === "punch_right" && obs.validity.punch_right) out.push({ who: "player", kind: "punch", punch: "cross", eventId: key });
+      if (e.type === "punch_left" && obs.validity.punch_left) out.push({ who: "player", kind: "punch", punch: enginePunchForStraight("left_straight"), eventId: key });
+      else if (e.type === "punch_right" && obs.validity.punch_right) out.push({ who: "player", kind: "punch", punch: enginePunchForStraight("right_straight"), eventId: key });
       // dodge_* / return_neutral are covered by the continuous lean; guard_return_* is NOT a block detector
     }
     return out;

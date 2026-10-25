@@ -8,7 +8,6 @@
 //   4. AI adaptation       — fightWindow rows every ~6 s feed the strategist; applyStrategyUpdate
 //                            validates/clamps the returned tuning for the bot controller
 //   5. Persistence         — fightResult + fighterProfile updated when the match ends
-//   6. Coach               — coachCue + coachEffect rows (spectators see captions; effect measurement)
 
 import {
   schema,
@@ -20,9 +19,12 @@ import {
 } from 'spacetimedb/server';
 import { ScheduleAt, Timestamp, type Identity } from 'spacetimedb';
 import {
-  COUNTER_SCALE,
   COUNTER_WINDOW_MS,
   PUNCHES,
+  BLOCK_DRAIN_PER_SEC,
+  DODGE_COST,
+  MAX_STAMINA,
+  STAMINA_REGEN_PER_SEC,
   asBody,
   asGuard,
   asPunchType,
@@ -36,9 +38,14 @@ import {
 
 // ─── Tuning ────────────────────────────────────────────────────────────────
 
-const MAX_HEALTH = 100;
+const MAX_HEALTH = 1000;
 const ROUND_MS = 180_000;
 const POSE_FRESH_MS = 250;
+const DODGE_WINDOW_MS = 350;
+const DODGE_STARTUP_MS = 100;
+const BLOCK_STARTUP_MS = 80;
+const BLOCK_MAX_MS = 900;
+const BLOCK_COOLDOWN_MS = 300;
 const WINDOW_MS = 6_000;
 const BOT_PAUSED_RETRY_MS = 500;
 const BOT_COUNTER_DELAY_MS = 250;
@@ -49,7 +56,7 @@ const BOT_DEFAULTS = {
   jabWeight: 0.4,
   straightWeight: 0.25,
   hookWeight: 0.2,
-  uppercutWeight: 0.15,
+  uppercutWeight: 0,
   leftBias: 0.5,
   defenseRate: 0.3,
   telegraphMs: 650,
@@ -57,11 +64,10 @@ const BOT_DEFAULTS = {
 
 // What the bot does when it decides to defend. Equal odds, so the player can't
 // learn one answer; the strategist can make it "read" better via defenseRate.
-const BOT_DEFENSES: { body: Body; left: Guard; right: Guard }[] = [
-  { body: 'lean_left', left: 'neutral', right: 'neutral' },
-  { body: 'lean_right', left: 'neutral', right: 'neutral' },
-  { body: 'lean_back', left: 'neutral', right: 'neutral' },
-  { body: 'neutral', left: 'block', right: 'block' },
+const BOT_DEFENSES: { body: Body; blocking: boolean }[] = [
+  { body: 'lean_left', blocking: false },
+  { body: 'lean_right', blocking: false },
+  { body: 'neutral', blocking: true },
 ];
 
 const PLAYER_SLOT = 0;
@@ -134,10 +140,16 @@ const fighter = table(
     slot: t.u8(),
     identity: t.option(t.identity()), // none = bot
     health: t.i32(),
+    stamina: t.f32(),
+    staminaAt: t.timestamp(),
     // Latest pose from CV. Server receipt time is used for freshness.
     bodyState: t.string(), // rules.Body
     leftGuard: t.string(), // rules.Guard
     rightGuard: t.string(),
+    defenseStartedAt: t.timestamp(),
+    blockReadyAt: t.timestamp(),
+    blockLockedUntilRelease: t.bool(),
+    dodgeReadyAt: t.timestamp(),
     lateral: t.f32(), // continuous, for rendering only
     trackingState: t.string(),
     dodgeValid: t.bool(),
@@ -287,44 +299,6 @@ const fightResult = table(
   }
 );
 
-// ─── Coach tables (v1.1) ───────────────────────────────────────────────────
-
-// Coach lines — spectator phones see these as captions.
-const coachCue = table(
-  { name: 'coach_cue', public: true },
-  {
-    id: t.u64().primaryKey().autoInc(),
-    matchId: t.u64().index('btree'),
-    cueId: t.string(),
-    atMs: t.u32(),
-    persona: t.string(), // 'coach' | 'opponent'
-    trigger: t.string(), // 'proactive' | 'fight_end' | ...
-    text: t.string(),
-    priority: t.string(),
-    source: t.string(), // 'rules' | 'claude' | 'offline'
-    evidence: t.string(), // JSON string[]
-    tactic: t.string(),
-  }
-);
-
-// "Did the advice help?" — AdaptationResult with cueId as strategyId.
-const coachEffect = table(
-  { name: 'coach_effect', public: true },
-  {
-    id: t.u64().primaryKey().autoInc(),
-    matchId: t.u64().index('btree'),
-    cueId: t.string(),
-    appliedAtMs: t.u32(),
-    evaluatedAtMs: t.u32(),
-    outcome: t.string(), // 'improved' | 'worsened' | 'inconclusive'
-    nextDecision: t.string(), // 'keep' | 'adjust' | 'revert'
-    beforeHitRate: t.f32(), // -1 = not measurable
-    afterHitRate: t.f32(),
-    confidence: t.f32(),
-    notes: t.string(),
-  }
-);
-
 const spacetimedb = schema({
   player,
   fighterProfile,
@@ -340,8 +314,6 @@ const spacetimedb = schema({
   windowTimer,
   fightWindow,
   fightResult,
-  coachCue,
-  coachEffect,
 });
 export default spacetimedb;
 
@@ -369,6 +341,31 @@ function isPast(ctx: Ctx, ts: Timestamp): boolean {
   return nowMicros(ctx) >= ts.microsSinceUnixEpoch;
 }
 
+function refreshStamina(ctx: Ctx, f: Fighter): Fighter {
+  const elapsedMs = Math.max(0, msSince(ctx, f.staminaAt));
+  if (elapsedMs === 0) return f;
+  const blocking = (asGuard(f.leftGuard) === 'block' || asGuard(f.rightGuard) === 'block')
+    && !f.blockLockedUntilRelease
+    && msSince(ctx, f.defenseStartedAt) <= BLOCK_MAX_MS
+    && ((asGuard(f.leftGuard) === 'block' && isPast(ctx, f.leftReadyAt))
+      || (asGuard(f.rightGuard) === 'block' && isPast(ctx, f.rightReadyAt)));
+  const dodging = asBody(f.bodyState) !== 'neutral';
+  const attacking = !isPast(ctx, f.leftReadyAt) || !isPast(ctx, f.rightReadyAt);
+  const delta = blocking
+    ? -(BLOCK_DRAIN_PER_SEC * elapsedMs) / 1000
+    : !dodging && !attacking ? (STAMINA_REGEN_PER_SEC * elapsedMs) / 1000 : 0;
+  const stamina = clamp(f.stamina + delta, 0, MAX_STAMINA);
+  const row = ctx.db.fighter.id.update({
+    ...f,
+    stamina,
+    staminaAt: ctx.timestamp,
+    ...(stamina <= 0 && blocking ? {
+      leftGuard: 'neutral', rightGuard: 'neutral', blockLockedUntilRelease: true,
+    } : {}),
+  });
+  return row;
+}
+
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
@@ -391,15 +388,6 @@ function requireMyFighter(ctx: Ctx, matchId: bigint): { match: Match; me: Fighte
   const me = fightersOf(ctx, matchId).find(f => f.identity?.equals(ctx.sender));
   if (!me) throw new SenderError('not a fighter in this match');
   return { match, me };
-}
-
-// For coach tables: the match may already be finished (fight_end cue).
-function requireFighter(ctx: Ctx, matchId: bigint): Match {
-  const match = ctx.db.fightMatch.id.find(matchId);
-  if (!match) throw new SenderError('match not found');
-  const fighter = fightersOf(ctx, matchId).find(f => f.identity?.equals(ctx.sender));
-  if (!fighter) throw new SenderError('not your match');
-  return match;
 }
 
 function ensureProfile(ctx: Ctx, who: Identity) {
@@ -437,9 +425,15 @@ function insertFighter(ctx: Ctx, matchId: bigint, slot: number, identity: Identi
     slot,
     identity,
     health: MAX_HEALTH,
+    stamina: MAX_STAMINA,
+    staminaAt: ctx.timestamp,
     bodyState: 'neutral',
     leftGuard: 'neutral',
     rightGuard: 'neutral',
+    defenseStartedAt: ctx.timestamp,
+    blockReadyAt: epoch,
+    blockLockedUntilRelease: false,
+    dodgeReadyAt: epoch,
     lateral: 0,
     // Bots are always "tracked"; humans start calibrating until their first pose arrives.
     trackingState: identity ? 'calibrating' : 'good',
@@ -520,7 +514,7 @@ function throwPunch(
   const spec = PUNCHES[punchType];
   const impactAt = after(ctx, windupMs);
   // The punching hand leaves the guard until it's back and rearmed.
-  const readyAt = after(ctx, Math.max(spec.cooldownMs, windupMs + 150));
+  const readyAt = after(ctx, Math.max(spec.recoveryMs, windupMs + 150));
   ctx.db.fighter.id.update({
     ...attacker,
     leftReadyAt: hand === 'left' ? readyAt : attacker.leftReadyAt,
@@ -551,48 +545,51 @@ function throwPunch(
 
 function poseIsUsable(ctx: Ctx, f: Fighter): boolean {
   if (!f.identity) return true;
-  return f.dodgeValid && f.trackingState !== 'lost' && f.trackingState !== 'calibrating'
+  return f.dodgeValid && (f.trackingState === 'good' || f.trackingState === 'degraded')
     && msSince(ctx, f.poseAt) <= POSE_FRESH_MS;
 }
 
 /** A guard only counts if that hand isn't currently out throwing a punch. */
 function defenderState(ctx: Ctx, f: Fighter): DefenderState {
+  const age = msSince(ctx, f.defenseStartedAt);
+  const body = age >= DODGE_STARTUP_MS && age <= DODGE_WINDOW_MS ? asBody(f.bodyState) : 'neutral';
   return {
-    body: asBody(f.bodyState),
-    leftGuard: isPast(ctx, f.leftReadyAt) ? asGuard(f.leftGuard) : 'neutral',
-    rightGuard: isPast(ctx, f.rightReadyAt) ? asGuard(f.rightGuard) : 'neutral',
+    body,
+    blocking: age >= BLOCK_STARTUP_MS && age <= BLOCK_MAX_MS && isPast(ctx, f.blockReadyAt)
+      && !f.blockLockedUntilRelease && body === 'neutral'
+      && ((asGuard(f.leftGuard) === 'block' && isPast(ctx, f.leftReadyAt))
+        || (asGuard(f.rightGuard) === 'block' && isPast(ctx, f.rightReadyAt))),
   };
 }
 
-function botDefense(ctx: Ctx, strat: Strategy | undefined): DefenderState {
+function botDefense(ctx: Ctx, bot: Fighter, strat: Strategy | undefined): DefenderState {
   if (ctx.random() >= (strat?.defenseRate ?? BOT_DEFAULTS.defenseRate)) {
-    return { body: 'neutral', leftGuard: 'neutral', rightGuard: 'neutral' };
+    return { body: 'neutral', blocking: false };
   }
   const d = BOT_DEFENSES[ctx.random.integerInRange(0, BOT_DEFENSES.length - 1)];
-  return { body: d.body, leftGuard: d.left, rightGuard: d.right };
+  // Same rule as the player: no slipping while its own punch is out.
+  const punching = !isPast(ctx, bot.leftReadyAt) || !isPast(ctx, bot.rightReadyAt);
+  if (punching && d.body !== 'neutral') return { body: 'neutral', blocking: false };
+  return { body: d.body, blocking: d.blocking };
 }
 
 function guardLabel(d: DefenderState): string {
-  const l = d.leftGuard === 'block';
-  const r = d.rightGuard === 'block';
-  return l && r ? 'both' : l ? 'left' : r ? 'right' : 'none';
+  return d.blocking ? 'both' : 'none';
 }
 
-function pickPunchType(ctx: Ctx, s: Strategy): PunchType {
+function pickPunchType(ctx: Ctx, s: Strategy, hand: Hand): PunchType {
   const weights: [PunchType, number][] = [
-    ['jab', s.jabWeight],
-    ['straight', s.straightWeight],
-    ['hook', s.hookWeight],
-    ['uppercut', s.uppercutWeight],
+    hand === 'left' ? ['left_straight', s.jabWeight] : ['right_straight', s.straightWeight],
+    hand === 'left' ? ['left_hook', s.hookWeight] : ['right_hook', s.hookWeight],
   ];
   const total = weights.reduce((sum, [, w]) => sum + w, 0);
-  if (total <= 0) return 'jab';
+  if (total <= 0) return hand === 'left' ? 'left_straight' : 'right_straight';
   let roll = ctx.random() * total;
   for (const [type, w] of weights) {
     roll -= w;
     if (roll < 0) return type;
   }
-  return 'jab';
+  return hand === 'left' ? 'left_straight' : 'right_straight';
 }
 
 function deleteAll<R>(rows: Iterable<R>, del: (r: R) => unknown) {
@@ -639,11 +636,11 @@ function finishMatch(ctx: Ctx, match: Match, winnerSlot: number | undefined, rea
       losses: p.losses + (winnerSlot !== undefined && winnerSlot !== f.slot ? 1 : 0),
       leftAttempts: p.leftAttempts + count(mine, a => a.hand === 'left'),
       rightAttempts: p.rightAttempts + count(mine, a => a.hand === 'right'),
-      jabs: p.jabs + count(mine, a => a.punchType === 'jab'),
-      straights: p.straights + count(mine, a => a.punchType === 'straight'),
-      hooks: p.hooks + count(mine, a => a.punchType === 'hook'),
-      uppercuts: p.uppercuts + count(mine, a => a.punchType === 'uppercut'),
-      unclassified: p.unclassified + count(mine, a => a.punchType === 'unclassified'),
+      jabs: p.jabs,
+      straights: p.straights + count(mine, a => a.punchType.endsWith('_straight')),
+      hooks: p.hooks + count(mine, a => a.punchType.endsWith('_hook')),
+      uppercuts: p.uppercuts,
+      unclassified: p.unclassified,
       punchesLanded: p.punchesLanded + count(mine, a => a.result === 'landed'),
       counters: p.counters + count(mine, a => a.counter && a.result === 'landed'),
       defenseOpportunities: p.defenseOpportunities + incoming.length,
@@ -735,14 +732,48 @@ export const updatePose = spacetimedb.reducer(
     lateral: t.f32(),
   },
   (ctx, args) => {
-    const { me } = requireMyFighter(ctx, args.matchId);
+    const { me: initial } = requireMyFighter(ctx, args.matchId);
+    if (!['good', 'degraded', 'lost', 'calibrating'].includes(args.trackingState)) {
+      throw new SenderError('invalid tracking state');
+    }
+    if (!Number.isFinite(args.lateral)) throw new SenderError('invalid lateral input');
+    let me = refreshStamina(ctx, initial);
+    let bodyState = args.dodgeValid ? asBody(args.bodyState) : 'neutral';
+    let stamina = me.stamina;
+    if (me.bodyState === 'neutral' && bodyState !== 'neutral') {
+      // No leaning while a punch is still out.
+      const punching = !isPast(ctx, me.leftReadyAt) || !isPast(ctx, me.rightReadyAt);
+      if (punching || !isPast(ctx, me.dodgeReadyAt) || stamina < DODGE_COST) bodyState = 'neutral';
+      else stamina -= DODGE_COST;
+    }
+    const canBlock = bodyState === 'neutral' && stamina > 0;
     const good = args.trackingState === 'good' || (args.trackingState === 'degraded' && args.dodgeValid);
-    ctx.db.fighter.id.update({
+    const defenseChanged = bodyState !== me.bodyState
+      || ((asGuard(args.leftGuard) === 'block' || asGuard(args.rightGuard) === 'block')
+        !== (asGuard(me.leftGuard) === 'block' || asGuard(me.rightGuard) === 'block'));
+    const wasBlocking = asGuard(me.leftGuard) === 'block' || asGuard(me.rightGuard) === 'block';
+    const wantsBlock = bodyState === 'neutral' && (asGuard(args.leftGuard) === 'block' || asGuard(args.rightGuard) === 'block');
+    const blockExpired = wasBlocking && msSince(ctx, me.defenseStartedAt) >= BLOCK_MAX_MS;
+    const blockLockedUntilRelease = wantsBlock
+      ? me.blockLockedUntilRelease || blockExpired
+      : false;
+    const blockReadyAt = !wantsBlock && (wasBlocking || me.blockLockedUntilRelease)
+      ? after(ctx, BLOCK_COOLDOWN_MS) : me.blockReadyAt;
+    const endedDodge = me.bodyState !== 'neutral' && bodyState === 'neutral';
+    const dodgeReadyAt = endedDodge ? after(ctx, 260) : me.dodgeReadyAt;
+    const defenseStartedAt = defenseChanged ? ctx.timestamp : me.defenseStartedAt;
+    me = ctx.db.fighter.id.update({
       ...me,
       // Untracked inputs can't defend: an invalid wrist is never a block.
-      bodyState: args.dodgeValid ? asBody(args.bodyState) : 'neutral',
-      leftGuard: args.punchLeftValid ? asGuard(args.leftGuard) : 'neutral',
-      rightGuard: args.punchRightValid ? asGuard(args.rightGuard) : 'neutral',
+      bodyState,
+      leftGuard: canBlock && !blockExpired && args.punchLeftValid ? asGuard(args.leftGuard) : 'neutral',
+      rightGuard: canBlock && !blockExpired && args.punchRightValid ? asGuard(args.rightGuard) : 'neutral',
+      defenseStartedAt,
+      blockReadyAt,
+      blockLockedUntilRelease,
+      dodgeReadyAt,
+      stamina,
+      staminaAt: ctx.timestamp,
       lateral: clamp(args.lateral, -3, 3),
       trackingState: args.trackingState,
       dodgeValid: args.dodgeValid,
@@ -766,7 +797,11 @@ export const submitMotionEvent = spacetimedb.reducer(
     punchType: t.string(), // '' when the CV can't classify → 'unclassified'
   },
   (ctx, { matchId, cvSessionId, eventId, eventType, punchType }) => {
-    const { me } = requireMyFighter(ctx, matchId);
+    let { me } = requireMyFighter(ctx, matchId);
+    me = refreshStamina(ctx, me);
+    if (!cvSessionId || cvSessionId.length > 128 || !eventId || eventId.length > 128) {
+      throw new SenderError('invalid motion event id');
+    }
 
     const key = `${cvSessionId}:${eventId}`;
     if (ctx.db.seenCvEvent.key.find(key)) return; // duplicate delivery
@@ -779,10 +814,15 @@ export const submitMotionEvent = spacetimedb.reducer(
     if (eventType !== 'punch_left' && eventType !== 'punch_right') return;
     const hand: Hand = eventType === 'punch_left' ? 'left' : 'right';
     if (hand === 'left' ? !me.punchLeftValid : !me.punchRightValid) return;
+    if (asBody(me.bodyState) !== 'neutral') return; // no swinging mid-lean
     if (!isPast(ctx, hand === 'left' ? me.leftReadyAt : me.rightReadyAt)) return; // hand still busy
 
-    const type = asPunchType(punchType);
-    throwPunch(ctx, me, hand, type, eventId, PUNCHES[type].windupMs);
+    const type = asPunchType(punchType) ?? (hand === 'left' ? 'left_straight' : 'right_straight');
+    if ((type.startsWith('left_') ? 'left' : 'right') !== hand) return;
+    const spec = PUNCHES[type];
+    if (me.stamina < spec.stamina) return;
+    const readyToPunch = ctx.db.fighter.id.update({ ...me, stamina: me.stamina - spec.stamina, staminaAt: ctx.timestamp });
+    throwPunch(ctx, readyToPunch, hand, type, eventId, spec.startupMs);
   }
 );
 
@@ -808,11 +848,16 @@ export const resolveAttack = spacetimedb.reducer(
     }
 
     const strat = ctx.db.botStrategy.matchId.find(atk.matchId) ?? undefined;
-    const state = defender.identity ? defenderState(ctx, defender) : botDefense(ctx, strat);
-    const outcome = resolvePunch(asPunchType(atk.punchType), atk.hand as Hand, state);
+    const state = defender.identity ? defenderState(ctx, defender) : botDefense(ctx, defender, strat);
+    const attackType = asPunchType(atk.punchType);
+    if (!attackType) {
+      ctx.db.attack.id.update({ ...atk, result: 'cancelled' });
+      return;
+    }
+    const outcome = resolvePunch(attackType, state);
 
-    const scale = outcome.damageScale * (atk.counter && outcome.result !== 'dodged' ? COUNTER_SCALE : 1);
-    const damage = Math.round(PUNCHES[asPunchType(atk.punchType)].damage * scale);
+    const scale = outcome.damageScale;
+    const damage = Math.round(PUNCHES[attackType].damage * scale);
     ctx.db.attack.id.update({
       ...atk,
       result: outcome.result,
@@ -868,10 +913,19 @@ export const botAct = spacetimedb.reducer(
     const s = ctx.db.botStrategy.matchId.find(match.id)!;
     const counter = !isPast(ctx, bot.counterUntil);
     // Counters are fast straight shots; otherwise follow the strategy's punch mix.
-    const type: PunchType = counter ? 'straight' : pickPunchType(ctx, s);
     const hand: Hand = ctx.random() < s.leftBias ? 'left' : 'right';
-    const telegraph = Math.max(250, s.telegraphMs * PUNCHES[type].telegraphScale * (counter ? 0.7 : 1));
-    throwPunch(ctx, bot, hand, type, '', telegraph);
+    const refreshedBot = refreshStamina(ctx, bot);
+    const type: PunchType = counter
+      ? (hand === 'left' ? 'left_straight' : 'right_straight')
+      : pickPunchType(ctx, s, hand);
+    const spec = PUNCHES[type];
+    if (refreshedBot.stamina < spec.stamina) {
+      scheduleBot(ctx, match.id, 500);
+      return;
+    }
+    const readyToPunch = ctx.db.fighter.id.update({ ...refreshedBot, stamina: refreshedBot.stamina - spec.stamina, staminaAt: ctx.timestamp });
+    const telegraph = Math.max(250, s.telegraphMs * spec.telegraphScale * (counter ? 0.7 : 1));
+    throwPunch(ctx, readyToPunch, hand, type, '', telegraph);
 
     // Higher aggression shortens the gap; jitter keeps it from being metronomic.
     const jitter = 0.75 + ctx.random() * 0.5;
@@ -991,34 +1045,5 @@ export const submitFightAnalysis = spacetimedb.reducer(
     ctx.db.fightResult.matchId.update({ ...result, analysis: text });
     const p = ensureProfile(ctx, ctx.sender);
     ctx.db.fighterProfile.identity.update({ ...p, lastAnalysis: text, updatedAt: ctx.timestamp });
-  }
-);
-
-// ─── 6. Coach (v1.1) ───────────────────────────────────────────────────────
-
-/** The player's client posts each coach line it speaks, so spectators see the same captions. */
-export const postCoachCue = spacetimedb.reducer(
-  {
-    matchId: t.u64(), cueId: t.string(), atMs: t.u32(), persona: t.string(), trigger: t.string(),
-    text: t.string(), priority: t.string(), source: t.string(), evidence: t.string(), tactic: t.string(),
-  },
-  (ctx, a) => {
-    requireFighter(ctx, a.matchId);
-    if (!a.text || a.text.length > 240) throw new SenderError('bad text');
-    if (a.evidence.length > 600) throw new SenderError('evidence too long');
-    if (!['rules', 'claude', 'offline'].includes(a.source)) throw new SenderError('bad source');
-    ctx.db.coachCue.insert({ id: 0n, ...a, cueId: a.cueId.slice(0, 120) });
-  }
-);
-
-export const postCoachEffect = spacetimedb.reducer(
-  {
-    matchId: t.u64(), cueId: t.string(), appliedAtMs: t.u32(), evaluatedAtMs: t.u32(), outcome: t.string(),
-    nextDecision: t.string(), beforeHitRate: t.f32(), afterHitRate: t.f32(), confidence: t.f32(), notes: t.string(),
-  },
-  (ctx, a) => {
-    requireFighter(ctx, a.matchId);
-    if (!['improved', 'worsened', 'inconclusive'].includes(a.outcome)) throw new SenderError('bad outcome');
-    ctx.db.coachEffect.insert({ id: 0n, ...a, cueId: a.cueId.slice(0, 120), notes: a.notes.slice(0, 300) });
   }
 );
