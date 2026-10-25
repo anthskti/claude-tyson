@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 1,
+  "demoCommit": "a642959975800432c38e6352745232bbbaee5bd7",
+  "files": [
+    {
+      "path": "harness/boxing_cv/__init__.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/__init__.py",
+      "sha256": "d39e203bfd7db3f3bd2d1fe8a1a1c7c2466d4f4e5cf44f59747f327dcaab8e82"
+    },
+    {
+      "path": "harness/boxing_cv/__main__.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/__main__.py",
+      "sha256": "4028a80a6c540ee08b748a1675c0c55f8aeb3f32a41cf6ebd987e7d8476c21c2"
+    },
+    {
+      "path": "harness/boxing_cv/airpod_buffered.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/airpod_buffered.py",
+      "sha256": "d71afa73c7dd9d9c8939df4cc1626ef1c2f865a1f6149b3d6d5e119929432184"
+    },
+    {
+      "path": "harness/boxing_cv/airpod_fast.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/airpod_fast.py",
+      "sha256": "0eefee1f4ec47e779d40a45eed7a4e704b6dfe5401dd1d88e800c9df62a6d9f2"
+    },
+    {
+      "path": "harness/boxing_cv/airpod_model.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/airpod_model.py",
+      "sha256": "431ee87ba982df454ba293552ad7e974a21e5a79f5b1e3018616c979a1766c00"
+    },
+    {
+      "path": "harness/boxing_cv/airpod_outward.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/airpod_outward.py",
+      "sha256": "8fa85add79bad91e329b051623d26d3444605569e7bdb3cece78921772ff9c04"
+    },
+    {
+      "path": "harness/boxing_cv/airpod_stateful.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/airpod_stateful.py",
+      "sha256": "63f9011421d64c40a2d2f49c285e69e9d8db942251a2a8989e6c34d583d76b1e"
+    },
+    {
+      "path": "harness/boxing_cv/calibrated_airpod.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/calibrated_airpod.py",
+      "sha256": "2f3f05dbbc9fc0edc463501a9cf24975abd158a6e90afa23a0314cf76a9fc59c"
+    },
+    {
+      "path": "harness/boxing_cv/calibrated_debug.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/calibrated_debug.py",
+      "sha256": "1f26741b760b4c7588fab11a4ba655adc5a1fe60e0c460e79a8d38274e8661cb"
+    },
+    {
+      "path": "harness/boxing_cv/calibrated_experiment.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/calibrated_experiment.py",
+      "sha256": "dbcb25c6ded100db758fd95049a25c052bed14924a5a10d6268e56ed258dcda0"
+    },
+    {
+      "path": "harness/boxing_cv/calibrated_runner.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/calibrated_runner.py",
+      "sha256": "842ff5b08125e307c757201e63e1439572741c7647ff2bb34a9874706f9e3a19"
+    },
+    {
+      "path": "harness/boxing_cv/calibrated_runtime.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/calibrated_runtime.py",
+      "sha256": "869a8190971ca702eb13de65921d7342a7e92c6791515ad505575ea86bddd610"
+    },
+    {
+      "path": "harness/boxing_cv/capture.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/capture.py",
+      "sha256": "625d7059624704c2b97c23b98598e657d4854b7494fb47cf05efa858073926dd"
+    },
+    {
+      "path": "harness/boxing_cv/config.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/config.py",
+      "sha256": "bc557804cfb978991a01642d9356738a85234fd686042c5393f0ea4ce3de7270"
+    },
+    {
+      "path": "harness/boxing_cv/detector.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/detector.py",
+      "sha256": "c2ae76559b8d87e2f455f58f7afbab2b0591e1bf0d57d746d5cc83c46870049d"
+    },
+    {
+      "path": "harness/boxing_cv/dual_airpod.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/dual_airpod.py",
+      "sha256": "a907ecc4885553bf68990db68ab4c2e94e706254a64daf511486209a1cc53d41"
+    },
+    {
+      "path": "harness/boxing_cv/features.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/features.py",
+      "sha256": "c24a1fd48e1777ab0e315a436c2c18585fb195978a7243af626ce912c16418dc"
+    },
+    {
+      "path": "harness/boxing_cv/game_bridge.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/game_bridge.py",
+      "sha256": "f681fd82a81efef4ae6132bef99772cf14573d07d75e7c16150544afbdfb5655"
+    },
+    {
+      "path": "harness/boxing_cv/imu_stateful.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/imu_stateful.py",
+      "sha256": "b70b2f6eb84afee9c69550bda47b63b8b9dc72971bc371dfa064df1a36744b6b"
+    },
+    {
+      "path": "harness/boxing_cv/inference.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/inference.py",
+      "sha256": "6642a2744947c3c28dd151e33d1aa197349473cdbcd116a40ccb6fd149ed6838"
+    },
+    {
+      "path": "harness/boxing_cv/iphone_bridge.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/iphone_bridge.py",
+      "sha256": "a29c9b2789b47cfbc50a5a4d22351b33e7fafa66a012229f6012e7c5b8b168a4"
+    },
+    {
+      "path": "harness/boxing_cv/model_bundle.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/model_bundle.py",
+      "sha256": "d7c7be45ffed85bf1fdcdce5b5ebc3965862a93797f92693261f55c0451e0949"
+    },
+    {
+      "path": "harness/boxing_cv/outward_models.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/outward_models.py",
+      "sha256": "beeff96b68d88ea5c986c8dfb8cce9c00c029dca447712c91d810ae2b87964ab"
+    },
+    {
+      "path": "harness/boxing_cv/recording.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/recording.py",
+      "sha256": "5aa26cfc52a557cedee5e48e635d2b1ef4a6c80340e5c240e997ae6d53d7f3fb"
+    },
+    {
+      "path": "harness/boxing_cv/ui.py",
+      "source": "cv-local-demo:a642959/motion/boxing_cv/ui.py",
+      "sha256": "2a47ec2221859e7f9554c0b9fddcdbe8ec64ab9ebaa787b006ed4ccd9581854e"
+    },
+    {
+      "path": "harness/collectors/build-iphone.sh",
+      "source": "cv-local-demo:a642959/motion/collectors/build-iphone.sh",
+      "sha256": "da3cbdf68b69f8a28d4fabbb9c8b34df83d1d0bf11d74761ac5c80029defede9"
+    },
+    {
+      "path": "harness/collectors/build.sh",
+      "source": "cv-local-demo:a642959/motion/collectors/build.sh",
+      "sha256": "b592c48193a169ca577b160dd1020374cf8ebc00276963e86da6b1698f30c529"
+    },
+    {
+      "path": "harness/collectors/iphone/AirPodUSBCollector.xcodeproj/project.pbxproj",
+      "source": "cv-local-demo:a642959/motion/collectors/iphone/AirPodUSBCollector.xcodeproj/project.pbxproj",
+      "sha256": "f60c74737b7819fd68f22b209d80d358d1d29d8bb8aea6dcbc426d7c484de223"
+    },
+    {
+      "path": "harness/collectors/iphone/AirPodUSBCollector.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist",
+      "source": "cv-local-demo:a642959/motion/collectors/iphone/AirPodUSBCollector.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist",
+      "sha256": "dfa0f9bb85b95ccba9c6811adadf8cb407fb5d52088e89db83ebc308ec448542"
+    },
+    {
+      "path": "harness/collectors/iphone/AirPodUSBCollector.xcodeproj/xcshareddata/xcschemes/AirPodUSBCollector.xcscheme",
+      "source": "cv-local-demo:a642959/motion/collectors/iphone/AirPodUSBCollector.xcodeproj/xcshareddata/xcschemes/AirPodUSBCollector.xcscheme",
+      "sha256": "9967f17ca690bdc1c141bcce390d403a7660b7c827f53045e16585d8b5b7980c"
+    },
+    {
+      "path": "harness/collectors/iphone/AirPodUSBCollector/CollectorApp.swift",
+      "source": "cv-local-demo:a642959/motion/collectors/iphone/AirPodUSBCollector/CollectorApp.swift",
+      "sha256": "c953f19959550c91a61985ed6cb8e3d63c2a1376ef7c798445951bb920950980"
+    },
+    {
+      "path": "harness/collectors/iphone/AirPodUSBCollector/Info.plist",
+      "source": "cv-local-demo:a642959/motion/collectors/iphone/AirPodUSBCollector/Info.plist",
+      "sha256": "3bfc6ffc8ea880b59141c5d5a3773c3a2a21f61fd3af3e458146c449203e63cb"
+    },
+    {
+      "path": "harness/collectors/package-iphone-sideload.sh",
+      "source": "cv-local-demo:a642959/motion/collectors/package-iphone-sideload.sh",
+      "sha256": "07e83dabbacf12b25760331d60d22b0dff743a22cb73b54396c9d72912103df9"
+    },
+    {
+      "path": "harness/collectors/swift/Collector.swift",
+      "source": "cv-local-demo:a642959/motion/collectors/swift/Collector.swift",
+      "sha256": "a0409ab361a743dd90e8d075acd2daa974ac8cfeb3ca64aaf968442f2c63c8a8"
+    },
+    {
+      "path": "harness/collectors/swift/Info.plist",
+      "source": "cv-local-demo:a642959/motion/collectors/swift/Info.plist",
+      "sha256": "41fbcde936d2e0c1b6000b957b5855ae9dc4bb1b5ea4322efb48be92455285f2",
+      "packagingChange": "Separate .testing bundle identity; sensor and logging code unchanged"
+    },
+    {
+      "path": "harness/models/airpod-left-fast-v1/model.json",
+      "source": "cv-local-demo:a642959/motion/models/airpod-left-fast-v1/model.json",
+      "sha256": "03a464a3066387ff5cb392702a1f2d753a67e14fa56dc8ebcfe854fbe649ead3"
+    },
+    {
+      "path": "harness/models/airpod-left-fast-v1/normalization.json",
+      "source": "cv-local-demo:a642959/motion/models/airpod-left-fast-v1/normalization.json",
+      "sha256": "1efdcdbc56ba9ca32e6eb00ba86439b4958f00ad90eb5d8051c876dc31c0a537"
+    },
+    {
+      "path": "harness/models/airpod-left-fast-v1/weights.pt",
+      "source": "cv-local-demo:a642959/motion/models/airpod-left-fast-v1/weights.pt",
+      "sha256": "748e2d2cfa3b215e742d52801e6cb7d1b2d4f9219518d7c478600b7f86486496"
+    },
+    {
+      "path": "harness/models/airpod-left-outward-v1/model.json",
+      "source": "cv-local-demo:a642959/motion/models/airpod-left-outward-v1/model.json",
+      "sha256": "b3aa3af89bd2b5329dee660dff635cb6fb379597a9adaab6c2fd06cc0565012f"
+    },
+    {
+      "path": "harness/models/airpod-left-outward-v1/weights.pt",
+      "source": "cv-local-demo:a642959/motion/models/airpod-left-outward-v1/weights.pt",
+      "sha256": "bfe98d1f69f3b91260e855a06bf1a57773364cb691c8e7a1a83ad99403a0f3fa"
+    },
+    {
+      "path": "harness/models/airpod-right-fast-v1/model.json",
+      "source": "cv-local-demo:a642959/motion/models/airpod-right-fast-v1/model.json",
+      "sha256": "e576cc0c92e395d0c7bfe1f3b53befa1eed42e512cd14a53e9669dd15d6a0fee"
+    },
+    {
+      "path": "harness/models/airpod-right-fast-v1/normalization.json",
+      "source": "cv-local-demo:a642959/motion/models/airpod-right-fast-v1/normalization.json",
+      "sha256": "1e64e2206ed8ea80890ac114e1766bf16ac853e3425d400b142f3fe271092acc"
+    },
+    {
+      "path": "harness/models/airpod-right-fast-v1/weights.pt",
+      "source": "cv-local-demo:a642959/motion/models/airpod-right-fast-v1/weights.pt",
+      "sha256": "e609ff929f8bb6f6bcb1e1307f3ae5bdd5b2d500dfe1404305ae1f476c23641a"
+    },
+    {
+      "path": "harness/models/airpod-right-outward-v1/model.json",
+      "source": "cv-local-demo:a642959/motion/models/airpod-right-outward-v1/model.json",
+      "sha256": "c6d7eb86c1aa0cecb17ec4c2eaaa8ad48399d675c870a8b54df02df4930a4984"
+    },
+    {
+      "path": "harness/models/airpod-right-outward-v1/weights.pt",
+      "source": "cv-local-demo:a642959/motion/models/airpod-right-outward-v1/weights.pt",
+      "sha256": "7966be091a3074b415c56c0447fbf587973c09162a8385893966652dcb562a25"
+    },
+    {
+      "path": "harness/models/fast-pairs.json",
+      "source": "cv-local-demo:a642959/motion/models/fast-pairs.json",
+      "sha256": "338ed596dba386f44b678832e732412acb556ed3a6ceec5f884348b73513c142"
+    },
+    {
+      "path": "harness/models/outward-pairs.json",
+      "source": "cv-local-demo:a642959/motion/models/outward-pairs.json",
+      "sha256": "d7b109e26e991d7ae3a30baf9a993d5cd079e02f732c6fb806fd6e914975fe72"
+    },
+    {
+      "path": "harness/pytest.ini",
+      "source": "cv-local-demo:a642959/motion/pytest.ini",
+      "sha256": "b160d82f7811555051f8966d8e02750a985227c1d022208c784e606946f2eada"
+    },
+    {
+      "path": "harness/requirements.txt",
+      "source": "cv-local-demo:a642959/motion/requirements.txt",
+      "sha256": "7194995e16726e4df53eb7004e1f5e4d1a382c333bc7ade7bf87a9a5ba607f02"
+    },
+    {
+      "path": "harness/tests/test_airpod_buffered.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_airpod_buffered.py",
+      "sha256": "f16a65daa452ca767684a799efc6b85af40146d0f34ee49b53966a785018da25"
+    },
+    {
+      "path": "harness/tests/test_dual_airpod.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_dual_airpod.py",
+      "sha256": "2c0c0c39dfafaa094bf167575a53ee4e0665c0f0031768076db5655152576148"
+    },
+    {
+      "path": "harness/tests/test_fast_models.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_fast_models.py",
+      "sha256": "4f320b46dd6ad92fb38a9c889744d958c070ac3625569c6d20159acc036524d1"
+    },
+    {
+      "path": "harness/tests/test_game_bridge.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_game_bridge.py",
+      "sha256": "a685f2bc36b0ce90d13759433491326ac223488775738f92474ceb9ea6c4b1b0"
+    },
+    {
+      "path": "harness/tests/test_iphone_bridge.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_iphone_bridge.py",
+      "sha256": "be093b0d8d97c8983ebdc63c48d3cf178b6dd5c791140df2767e9522cae4e180"
+    },
+    {
+      "path": "harness/tests/test_outward_models.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_outward_models.py",
+      "sha256": "ba7d5e11e75c6fed40d286434fd7f49c97a8ccb92a1959e093d250223ab7ab4b"
+    },
+    {
+      "path": "harness/tests/test_quick_calibration.py",
+      "source": "cv-local-demo:a642959/motion/tests/test_quick_calibration.py",
+      "sha256": "7c02a62ff3c427ddfde0c24b243f0c35ee9ace117a41e7a7196090bd7e687988"
+    },
+    {
+      "path": "harness/models/airpod-left-cnn-v1/model.json",
+      "source": "experiment-kit/models/airpod-left-cnn-v1/model.json",
+      "sha256": "697a9db7cce82c5c4e9b04c305767f5f5c3105084298650d1e0ffea1fe070c15"
+    },
+    {
+      "path": "harness/models/airpod-left-cnn-v1/weights.pt",
+      "source": "experiment-kit/models/airpod-left-cnn-v1/weights.pt",
+      "sha256": "e2b727f1fdc5d271a58d44ceeadef2e0de9289fddb07dc4c4923f88dff8be8e2"
+    },
+    {
+      "path": "harness/models/airpod-left-cnn-v1/normalization.json",
+      "source": "experiment-kit/models/airpod-left-cnn-v1/normalization.json",
+      "sha256": "f5715c2cf5bf549b8fb017987208d04ca9a093387a8e322a5e759595f7f24408"
+    },
+    {
+      "path": "harness/models/airpod-left-cnn-1500-v1/model.json",
+      "source": "experiment-kit/models/airpod-left-cnn-1500-v1/model.json",
+      "sha256": "42d23262fddd3025a1a2b2b6e080ab07998e9aa1c8a18aaf02a7b5d1ff9e95d9"
+    },
+    {
+      "path": "harness/models/airpod-left-cnn-1500-v1/weights.pt",
+      "source": "experiment-kit/models/airpod-left-cnn-1500-v1/weights.pt",
+      "sha256": "7254146ec088203d87ac97437b51168dd83d0db9aa30594bb8d9779810411949"
+    },
+    {
+      "path": "harness/models/airpod-left-cnn-1500-v1/normalization.json",
+      "source": "experiment-kit/models/airpod-left-cnn-1500-v1/normalization.json",
+      "sha256": "4f32a1fe286d3f8e0f5ad58ca158ca5a70ce95e2a8d9bd6dc3e4777e925e3d1e"
+    },
+    {
+      "path": "harness/boxing_cv/imu_cnn_model.py",
+      "source": "experiment-kit/boxing_cv/imu_cnn_model.py",
+      "sha256": "33203d6e8cfbf253ee18b2ed9d672271e3b4d9b1b2d19c7ea7a9d5d21e7bc0c5"
+    }
+  ],
+  "poseSha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+  "notes": [
+    "Runtime copied from committed cv-local-demo; new setup/run wrappers and CNN inference-only adapter added for standalone testing.",
+    "Historical absolute paths in model metadata are provenance only, not runtime dependencies.",
+    "No training datasets, raw sensor/video recordings, virtual environments, or signed binaries included."
+  ]
+}

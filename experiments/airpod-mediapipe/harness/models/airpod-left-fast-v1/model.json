@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "targetMeaning": "early_outward_demo_v1",
+  "annotationVersion": "parent-120ms-early-causal-prefix-v1",
+  "modelType": "outward_gru",
+  "architecture": {
+    "version": "completion-gru-v1",
+    "inputs": 6,
+    "projection": 32,
+    "hidden": 64,
+    "classes": [
+      "non_punch",
+      "straight",
+      "hook"
+    ],
+    "missingDecay": 0.9,
+    "maxMissingSteps": 4
+  },
+  "classes": [
+    "non_punch",
+    "straight",
+    "hook"
+  ],
+  "channelNames": [
+    "a_forward",
+    "a_side",
+    "a_up",
+    "w_forward",
+    "w_side",
+    "w_up"
+  ],
+  "punchingHand": "left",
+  "normalization": {
+    "preprocessingVersion": "imu-cnn-preprocessing-v1",
+    "channelNames": [
+      "a_forward",
+      "a_side",
+      "a_up",
+      "w_forward",
+      "w_side",
+      "w_up"
+    ],
+    "mean": [
+      -0.0021200359793459573,
+      -0.0016601294833219172,
+      0.004979935159871206,
+      0.16484744639531534,
+      -0.1810967581925684,
+      -0.03230233643107903
+    ],
+    "std": [
+      0.7373482542861912,
+      0.7159056533220578,
+      0.43535503681395654,
+      2.305841627074806,
+      2.1431399095092094,
+      1.5455419611285615
+    ],
+    "scale": [
+      0.7373482542861912,
+      0.7159056533220578,
+      0.43535503681395654,
+      2.305841627074806,
+      2.1431399095092094,
+      1.5455419611285615
+    ],
+    "parentTrialIds": [
+      "10f7b55f6173:8",
+      "10f7b55f6173:11",
+      "10f7b55f6173:12",
+      "10f7b55f6173:16",
+      "10f7b55f6173:18",
+      "10f7b55f6173:19",
+      "10f7b55f6173:20",
+      "10f7b55f6173:21",
+      "10f7b55f6173:24",
+      "10f7b55f6173:25",
+      "10f7b55f6173:26",
+      "10f7b55f6173:27",
+      "10f7b55f6173:28",
+      "10f7b55f6173:29",
+      "10f7b55f6173:30",
+      "10f7b55f6173:31",
+      "10f7b55f6173:32",
+      "10f7b55f6173:33",
+      "10f7b55f6173:34",
+      "10f7b55f6173:35",
+      "10f7b55f6173:36",
+      "10f7b55f6173:37",
+      "10f7b55f6173:39",
+      "10f7b55f6173:40",
+      "10f7b55f6173:41",
+      "10f7b55f6173:42",
+      "10f7b55f6173:43",
+      "10f7b55f6173:44",
+      "10f7b55f6173:45",
+      "10f7b55f6173:46",
+      "10f7b55f6173:47",
+      "10f7b55f6173:48",
+      "10f7b55f6173:49",
+      "10f7b55f6173:50",
+      "10f7b55f6173:51",
+      "10f7b55f6173:52",
+      "10f7b55f6173:53",
+      "10f7b55f6173:54",
+      "10f7b55f6173:55",
+      "10f7b55f6173:56",
+      "10f7b55f6173:57",
+      "10f7b55f6173:58",
+      "10f7b55f6173:60",
+      "10f7b55f6173:61",
+      "10f7b55f6173:62",
+      "10f7b55f6173:63",
+      "10f7b55f6173:64",
+      "10f7b55f6173:65",
+      "10f7b55f6173:66",
+      "10f7b55f6173:68",
+      "10f7b55f6173:69",
+      "10f7b55f6173:70",
+      "10f7b55f6173:72",
+      "10f7b55f6173:73",
+      "10f7b55f6173:74",
+      "10f7b55f6173:75"
+    ],
+    "sampleCount": 2766,
+    "fittedOn": "valid original training timesteps only"
+  },
+  "eventPolicy": {
+    "probability": 0.45,
+    "margin": 0.05,
+    "confirmations": 1,
+    "rearm_probability": 0.6,
+    "rearm_samples": 2,
+    "cooldown_ms": 200.0
+  },
+  "datasetFingerprint": "5e8079c0ac98b1f55f3d7cd874bba13b50b469f8e4b6f6547278db5380000b77",
+  "environment": {
+    "python": "3.11.7",
+    "numpy": "1.26.4",
+    "torch": "2.5.1",
+    "machine": "arm64",
+    "platform": "macOS-14.8.7-arm64-arm-64bit",
+    "device": "cpu",
+    "threads": 1,
+    "reproducibility": "Seeded same-environment runs; not guaranteed identical across devices/releases"
+  },
+  "weightsSha256": "748e2d2cfa3b215e742d52801e6cb7d1b2d4f9219518d7c478600b7f86486496",
+  "seed": 42,
+  "stream": {
+    "sampleRateHz": 25,
+    "shortGapMaxMs": 200,
+    "recoveryValidSamples": 2,
+    "warmupWindowMs": 0
+  },
+  "training": {
+    "bestEpoch": 12,
+    "epochs": 20,
+    "updatesPerEpoch": 30,
+    "batchSize": 32,
+    "learningRate": 0.0001,
+    "weightDecay": 0.0001,
+    "eligibleExamples": 1363,
+    "allAcceptedTrainingExamplesExposed": true,
+    "elapsedSeconds": 14.387895499821752,
+    "initialization": "Original outward weights; fresh optimizer; no pilot weights/scaler reused",
+    "sampling": "Initial full coverage pass then parent-uniform causal prefixes, <=2s; endpoint-only loss; 15% eligible consumed suffixes are background"
+  },
+  "override": null,
+  "preflightSignature": "5adea95a6aa7dee782ba1330720c13002eac4e2d3dc81d09a3f5bace6c934906",
+  "scope": "Demo-only anticipation from six causal IMU channels; false positives accepted by operator",
+  "demoOnly": true,
+  "baseModel": {
+    "path": "/Users/hanigherwi/Documents/Codex/2026-10-21/i-x20/outputs/adaptive-boxing-cv/models/airpod-left-outward-v1",
+    "weightsSha256": "bfe98d1f69f3b91260e855a06bf1a57773364cb691c8e7a1a83ad99403a0f3fa",
+    "targetMeaning": "outward_strike_v1"
+  },
+  "targetSettings": {
+    "nominalLeadMs": 120,
+    "minimumAfterOnsetMs": 80,
+    "holdMs": 400,
+    "augmentationTiming": "map both parent interval boundaries through each variant time warp"
+  }
+}
