@@ -25,6 +25,7 @@ export interface HudActions {
   watchNext(): void;
   /** Buttons with data-ring call this instead of their data-action. */
   watch(ring: number): void;
+  changeName(): void;
 }
 
 /** One line per ring for the menu and the spectator bar. */
@@ -62,6 +63,11 @@ export interface HudState {
   watch: number;
   /** Names over the health bars: mine and my opponent's, or red and blue when watching. */
   names: [string, string];
+  playerName?: string;
+  /** True while CornerScene owns the camera; hides the menu overlay. */
+  cinematic?: boolean;
+  /** True during the result-card window before corner scene; hides the menu. */
+  debriefing?: boolean;
 }
 
 const el = (id: string) => document.getElementById(id)!;
@@ -89,6 +95,13 @@ export class Hud {
       <div id="vignette" class="vignette"></div>
       <div id="pose" class="pose"></div>
       <div id="telegraph" class="telegraph"></div>
+      <div id="dialogue" class="dialogue"></div>
+      <div id="adapted-tag" class="adapted-tag"></div>
+      <div id="adapt-vignette" class="adapt-vignette"></div>
+      <div id="debrief" class="debrief" style="display:none"></div>
+      <div id="result-card" class="result-card" style="display:none"></div>
+      <div id="name-entry-screen" class="name-entry-screen" style="display:none"></div>
+      <div id="wii-safety-screen" class="wii-safety-screen" style="display:none"></div>
       <div class="keys">
         <div class="keys-title">KEYBOARD CONTROLS</div>
         <div><b>J</b> Left straight · <b>C</b> Right straight</div>
@@ -135,7 +148,7 @@ export class Hud {
     el('opp-name').textContent = s.names[1];
 
     const menu = el('menu');
-    const showMenu = !active && !s.spectating;
+    const showMenu = !active && !s.spectating && !s.cinematic && !s.debriefing;
     menu.style.display = showMenu ? 'flex' : 'none';
     if (showMenu) this.setHtml('menu', this.menuHtml(s));
 
@@ -208,12 +221,15 @@ export class Hud {
           <div>of ${p.defenseOpportunities} incoming: slipped ${p.slips} · leaned back ${p.leanBacks} · blocked ${p.blocks} · hit ${p.hitsTaken}</div>
         </div>`
       : '';
+    const name = s.playerName ?? 'FIGHTER';
+    const nameHtml = `<div class="menu-player-name">${escapeHtml(name)} <button class="profile-change-name" data-action="changeName">change</button></div>`;
     return `
       <h1>CLAUDE TYSON</h1>
+      ${nameHtml}
       ${resultHtml}
       ${this.inputPicker(s)}
       <div class="buttons">
-        <button data-action="fightBot" ${offline || full ? 'disabled' : ''} ${full ? 'title="Every ring is taken. Spectate, or queue for PvP."' : ''}>Fight adaptive bot</button>
+        <button data-action="fightBot" ${offline || full ? 'disabled' : ''} ${full ? 'title="Every ring is taken. Spectate, or queue for PvP."' : ''}>Fight Claude Tyson</button>
         ${s.queued
           ? `<button data-action="cancelPvp" class="secondary">${full ? 'Waiting for a free ring' : 'Waiting for opponent'}… cancel</button>`
           : `<button data-action="findPvp" class="secondary" ${offline ? 'disabled' : ''}>Find PvP match</button>`}
@@ -322,6 +338,161 @@ export class Hud {
 
   private telegraphTimer = 0;
   private calibrationKey = '';
+  private dialogueTimer = 0;
+  private adaptedTagTimer = 0;
+  private typewriterTimer = 0;
+  private resultCardTimer = 0;
+
+  showDialogue(line: string) {
+    const d = el('dialogue');
+    d.textContent = `"${line}"`;
+    d.classList.remove('visible');
+    void d.offsetWidth;
+    d.classList.add('visible');
+    clearTimeout(this.dialogueTimer);
+    this.dialogueTimer = window.setTimeout(() => d.classList.remove('visible'), 4200);
+  }
+
+  showAdaptedTag(explanation: string) {
+    const tag = el('adapted-tag');
+    tag.innerHTML = `<span class="adapted-label">ADAPTED</span><span class="adapted-explain">${escapeHtml(explanation)}</span>`;
+    tag.classList.remove('visible');
+    void tag.offsetWidth;
+    tag.classList.add('visible');
+    clearTimeout(this.adaptedTagTimer);
+    this.adaptedTagTimer = window.setTimeout(() => tag.classList.remove('visible'), 3500);
+    const v = el('adapt-vignette');
+    v.classList.remove('flash');
+    void v.offsetWidth;
+    v.classList.add('flash');
+  }
+
+  showAdaptation(outcome: string, explanation: string) {
+    this.toast(outcome === 'improved' ? 'STRATEGY TUNED ✓' : 'STRATEGY REVISED', outcome === 'improved' ? 'good' : 'info');
+  }
+
+  showCornerAnalysis(text: string, source: 'claude' | 'offline', onDismiss?: () => void) {
+    const d = el('debrief');
+    const tag = source === 'claude'
+      ? `<span class="debrief-source">CLAUDE CRAB</span>`
+      : `<span class="debrief-source offline">CORNER NOTES</span>`;
+    d.innerHTML = `
+      <div class="debrief-box">
+        <div class="debrief-header">
+          <div class="debrief-claude-icon">CC</div>
+          ${tag}
+        </div>
+        <p id="debrief-text"></p>
+        <button class="debrief-close">GOT IT</button>
+      </div>`;
+    d.style.display = 'block';
+    d.querySelector('.debrief-close')!.addEventListener('click', () => {
+      d.style.display = 'none';
+      clearTimeout(this.typewriterTimer);
+      onDismiss?.();
+    });
+    const textEl = document.getElementById('debrief-text')!;
+    let i = 0;
+    const type = () => {
+      textEl.textContent = text.slice(0, i);
+      if (i < text.length) { i++; this.typewriterTimer = window.setTimeout(type, 20); }
+    };
+    clearTimeout(this.typewriterTimer);
+    window.setTimeout(type, 300);
+  }
+
+  showResultCard(won: boolean, reason: string, stars: number) {
+    const card = el('result-card');
+    const banner = won ? 'VICTORY!' : 'DEFEAT';
+    const starsHtml = won ? [1, 2, 3].map(i => `<span style="${i <= stars ? '' : 'filter:grayscale(1) opacity(0.3)'}">⭐</span>`).join('') : '';
+    card.innerHTML = `<div class="result-card-inner">
+      <div class="result-card-banner ${won ? 'win' : 'lose'}">${banner}</div>
+      <div class="result-card-by">by ${escapeHtml(reason)}</div>
+      ${won ? `<div class="result-stars">${starsHtml}</div>` : ''}
+    </div>`;
+    card.style.display = 'flex';
+    clearTimeout(this.resultCardTimer);
+    this.resultCardTimer = window.setTimeout(() => {
+      card.classList.add('fade-out');
+      window.setTimeout(() => { card.style.display = 'none'; card.classList.remove('fade-out'); }, 400);
+    }, 2000);
+  }
+
+  showNameEntry(onSubmit: (name: string) => void) {
+    const screen = el('name-entry-screen');
+    screen.innerHTML = `
+      <div class="ne-logo">CLAUDE TYSON</div>
+      <div class="ne-prompt">WHAT'S YOUR NAME,<br>FIGHTER?</div>
+      <input class="ne-input" type="text" placeholder="ENTER NAME" maxlength="16"
+             autocomplete="off" spellcheck="false">
+      <button class="ne-btn" disabled>LET'S GO</button>`;
+    screen.style.display = 'flex';
+    screen.classList.remove('ne-fade-out');
+    const input = screen.querySelector<HTMLInputElement>('.ne-input')!;
+    const btn   = screen.querySelector<HTMLButtonElement>('.ne-btn')!;
+    const submit = () => {
+      const name = input.value.trim().toUpperCase().slice(0, 16);
+      if (!name) return;
+      screen.classList.add('ne-fade-out');
+      window.setTimeout(() => { screen.style.display = 'none'; screen.classList.remove('ne-fade-out'); onSubmit(name); }, 380);
+    };
+    input.addEventListener('input', () => { btn.disabled = input.value.trim().length === 0; });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    btn.addEventListener('click', submit);
+    window.setTimeout(() => input.focus(), 120);
+  }
+
+  showWiiSafety(onContinue: () => void) {
+    const screen = el('wii-safety-screen');
+    screen.innerHTML = `
+      <div class="wss-bg">
+        <div class="wss-watermark">CT</div>
+        <div class="wss-rope wss-rope-1"></div><div class="wss-rope wss-rope-2"></div><div class="wss-rope wss-rope-3"></div>
+        <div class="wss-post wss-post-l"></div><div class="wss-post wss-post-r"></div>
+        <div class="wss-glove wss-glove-1">🥊</div><div class="wss-glove wss-glove-2">🥊</div>
+        <div class="wss-glove wss-glove-3">🥊</div><div class="wss-glove wss-glove-4">🥊</div>
+        <div class="wss-glove wss-glove-5">🥊</div>
+        <div class="wss-star wss-star-1">⭐</div><div class="wss-star wss-star-2">⭐</div>
+        <div class="wss-star wss-star-3">⭐</div><div class="wss-star wss-star-4">⭐</div>
+        <div class="wss-star wss-star-5">⭐</div><div class="wss-star wss-star-6">⭐</div>
+        <div class="wss-vignette"></div>
+      </div>
+      <div class="wss-dialog">
+        <div class="wss-dialog-header">
+          <div class="wss-dialog-icon">!</div>
+          <span class="wss-dialog-header-title">Health &amp; Safety</span>
+        </div>
+        <div class="wss-dialog-body">
+          <svg class="wss-diagram-svg" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="82" height="82" rx="4" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+            <circle cx="44" cy="44" r="32" fill="none" stroke="#ff8c42" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <circle cx="44" cy="41" r="7" fill="#ff8c42"/><circle cx="44" cy="31" r="5" fill="#ff8c42"/>
+            <line x1="37" y1="40" x2="23" y2="34" stroke="#ff8c42" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="51" y1="40" x2="65" y2="34" stroke="#ff8c42" stroke-width="3.5" stroke-linecap="round"/>
+            <text x="44" y="11" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">↑</text>
+            <text x="44" y="84" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">↓</text>
+            <text x="9"  y="47" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">←</text>
+            <text x="81" y="47" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">→</text>
+          </svg>
+          <div class="wss-dialog-textcol">
+            <p class="wss-dialog-title">Before You Play</p>
+            <p class="wss-dialog-text">Make sure there are <b>no people or objects</b> nearby that could be hit during gameplay.<br><br>Clear at least <b>3 feet</b> of open space in all directions.</p>
+          </div>
+        </div>
+        <div class="wss-dialog-footer">
+          <span class="wss-dialog-hint">Click anywhere to continue</span>
+          <button class="wss-btn"><span class="wss-btn-a">A</span> OK</button>
+        </div>
+      </div>`;
+    screen.style.display = 'flex';
+    screen.classList.remove('wss-fade-out');
+    const done = () => {
+      screen.classList.add('wss-fade-out');
+      window.setTimeout(() => { screen.style.display = 'none'; screen.classList.remove('wss-fade-out'); onContinue(); }, 400);
+    };
+    screen.querySelector('.wss-btn')!.addEventListener('click', (e) => { e.stopPropagation(); done(); });
+    screen.addEventListener('click', done, { once: true });
+  }
 
   toast(text: string, kind: 'good' | 'bad' | 'info' = 'info') {
     const t = document.createElement('div');
