@@ -6,6 +6,8 @@ import type { MatchView, ProfileRow, ResultRow } from './net/server';
 
 const MAX_STAMINA = 200;
 const MAX_HEALTH = 100; // SpacetimeDB stores tenths: 100 = 10 HP and a full bar.
+const SHOW_CLAUDE_DEBUG = process.env.NODE_ENV === 'development'
+  && process.env.NEXT_PUBLIC_CLAUDE_LOG === 'true';
 
 // Plain-DOM HUD. Re-rendered on server changes; the timer and health bars are also
 // refreshed every frame via tick().
@@ -84,10 +86,10 @@ export class Hud {
       <div id="menu" class="menu"></div>
       <div id="spectate" class="spectate"></div>
       <div id="adapt" class="adapt"></div>
-      <details id="claude-log" class="claude-log">
+      ${SHOW_CLAUDE_DEBUG ? `<details id="claude-log" class="claude-log">
         <summary>Claude log <span id="claude-log-count">0</span></summary>
         <ol id="claude-log-entries"><li class="empty">Fight an adaptive bot to see its decisions here.</li></ol>
-      </details>
+      </details>` : ''}
       <div id="pause" class="pause"></div>
       <div id="calibration" class="calibration"></div>
       <div id="toasts" class="toasts"></div>
@@ -127,6 +129,7 @@ export class Hud {
   }
 
   logClaude(kind: 'window' | 'strategy' | 'analysis' | 'error', message: string) {
+    if (!SHOW_CLAUDE_DEBUG) return;
     const entries = el('claude-log-entries');
     entries.querySelector('.empty')?.remove();
     const item = document.createElement('li');
@@ -165,8 +168,8 @@ export class Hud {
 
     const adapt = el('adapt');
     const strat = s.view?.strategy;
-    adapt.style.display = active && strat ? 'block' : 'none';
-    if (strat) {
+    adapt.style.display = SHOW_CLAUDE_DEBUG && active && strat ? 'block' : 'none';
+    if (SHOW_CLAUDE_DEBUG && strat) {
       adapt.innerHTML = `
         <div class="label">Bot strategy · rev ${strat.revision}</div>
         <div class="explain">${escapeHtml(strat.explanation)}</div>
