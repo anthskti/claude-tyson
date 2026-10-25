@@ -411,7 +411,7 @@ renderer.setAnimationLoop(() => {
   const fp = isFirstPerson();
   firstPerson.visible = fp;
   gloves.root.visible = fp;
-  arena.setFocus(fp ? view!.match.ring : hudState.watch, fp);
+  arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
   arena.update(dt, Date.now());
   if (!fp) {
     orbitAngle += dt * ORBIT_RAD_PER_S;

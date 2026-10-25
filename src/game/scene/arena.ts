@@ -9,7 +9,10 @@ import type { AttackRow, RingView } from '../net/server';
 //
 // The ring in focus sits at the origin, where the first-person scene in main.ts lives, so
 // the rest of the arena is laid out around whoever is looking. While the player fights,
-// their own ring is hidden here and drawn first-person instead.
+// their own ring is hidden here and drawn first-person instead, and the arena turns so
+// they look out from their own corner: the first-person camera always faces -Z, which is
+// red's view, so blue sees the arena turned half way round. Either way one of the two
+// fighters faces the neighbouring row of rings.
 
 // Keep in step with RING_COUNT in spacetimedb/src/index.ts.
 export const RING_COUNT = 4;
@@ -94,6 +97,7 @@ export class Arena {
   private stages: RingStage[] = [];
   private focus = -1;
   private hideFocus = false;
+  private turned = false;
 
   constructor() {
     for (let i = 0; i < RING_COUNT; i++) {
@@ -104,11 +108,16 @@ export class Arena {
     this.setFocus(0, false);
   }
 
-  /** Centre the arena on `ring`. `hide` hands that ring to the first-person scene. */
-  setFocus(ring: number, hide: boolean) {
-    if (ring === this.focus && hide === this.hideFocus) return;
+  /**
+   * Centre the arena on `ring`. `hide` hands that ring to the first-person scene;
+   * `turned` shows it from the blue corner.
+   */
+  setFocus(ring: number, hide: boolean, turned = false) {
+    if (ring === this.focus && hide === this.hideFocus && turned === this.turned) return;
     this.focus = ring;
     this.hideFocus = hide;
+    this.turned = turned;
+    this.root.rotation.y = turned ? Math.PI : 0;
     const origin = gridPosition(ring);
     this.stages.forEach((stage, i) => {
       stage.root.position.copy(gridPosition(i)).sub(origin);
