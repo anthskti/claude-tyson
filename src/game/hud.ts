@@ -4,6 +4,8 @@ import type { CalibrationView } from './cv/guard';
 import { RULES_HTML } from './combatText';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
 
+const MAX_STAMINA = 200;
+
 // Plain-DOM HUD. Re-rendered on server changes; the timer and health bars are also
 // refreshed every frame via tick().
 
@@ -74,7 +76,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="bars">
         <div class="bar me"><span id="me-name" class="name">YOU</span><div class="track"><div id="hp-me" class="fill"></div></div><div class="track stamina"><div id="stamina-me" class="fill"></div></div></div>
-        <div id="timer" class="timer">3:00</div>
+        <div id="timer" class="timer">0:30</div>
         <div class="bar opp"><span id="opp-name" class="name">OPPONENT</span><div class="track"><div id="hp-opp" class="fill"></div></div><div class="track stamina"><div id="stamina-opp" class="fill"></div></div></div>
       </div>
       <div id="status" class="status"></div>
@@ -247,9 +249,9 @@ export class Hud {
     const active = view?.match.status === 'active';
     el('hp-me').style.width = `${view ? Math.max(0, view.me.health / 10) : 100}%`;
     el('hp-opp').style.width = `${view ? Math.max(0, view.opponent.health / 10) : 100}%`;
-    el('stamina-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.stamina)) : 100}%`;
-    el('stamina-opp').style.width = `${view ? Math.max(0, Math.min(100, view.opponent.stamina)) : 100}%`;
-    let remaining = 180;
+    el('stamina-me').style.width = `${view ? Math.max(0, Math.min(100, view.me.stamina / MAX_STAMINA * 100)) : 100}%`;
+    el('stamina-opp').style.width = `${view ? Math.max(0, Math.min(100, view.opponent.stamina / MAX_STAMINA * 100)) : 100}%`;
+    let remaining = 30;
     if (active) {
       const endsMs = Number(view.match.endsAt.microsSinceUnixEpoch / 1000n);
       remaining = Math.max(0, Math.ceil((endsMs - Date.now()) / 1000));

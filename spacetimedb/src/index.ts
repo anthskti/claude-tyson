@@ -39,8 +39,8 @@ import {
 
 // ─── Tuning ────────────────────────────────────────────────────────────────
 
-const MAX_HEALTH = 1000;
-const ROUND_MS = 180_000;
+const MAX_HEALTH = 100;
+const ROUND_MS = 30_000;
 const POSE_FRESH_MS = 250;
 const DODGE_WINDOW_MS = 350;
 const DODGE_STARTUP_MS = 100;

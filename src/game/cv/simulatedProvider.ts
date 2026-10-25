@@ -39,6 +39,15 @@ const PUNCH_LOCK_MS: Record<PunchType, { startup: number; recovery: number }> = 
   left_hook: { startup: 220, recovery: 360 },
   right_hook: { startup: 220, recovery: 360 },
 };
+const PUNCH_STAMINA: Record<PunchType, number> = {
+  left_straight: 5,
+  right_straight: 12,
+  left_hook: 16,
+  right_hook: 16,
+};
+const DODGE_STAMINA = 20;
+const BLOCK_DRAIN_PER_SEC = 4;
+const MAX_STAMINA = 200;
 const MAX_DEFENSE_HOLD_MS = 2000;
 const BLOCK_COOLDOWN_MS = 300;
 const DODGE_COOLDOWN_MS = 260;
@@ -59,6 +68,7 @@ export class SimulatedCvProvider implements CvProvider {
   private dodgeSide: 'left' | 'right' | null = null;
   private actionReadyAt = 0;
   private activeDefense: { action: Defense; startedAt: number } | null = null;
+  private stamina = 0;
   private held = new Set<string>();
   private ignoreUntilRelease = new Set<string>();
   /** Physical keys ignored by the keyboard listener (e.g. punches/slips while the camera drives them). */
@@ -107,6 +117,11 @@ export class SimulatedCvProvider implements CvProvider {
     const k = key.toLowerCase();
     this.held.delete(k);
     this.ignoreUntilRelease.delete(k);
+  }
+
+  /** Updated from subscribed server state; affordability remains server-authoritative. */
+  setStamina(stamina: number) {
+    this.stamina = Math.max(0, Math.min(MAX_STAMINA, stamina));
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -161,6 +176,19 @@ export class SimulatedCvProvider implements CvProvider {
 
     this.updateDefense(now);
 
+    if (this.activeDefense?.action === 'block') {
+      this.stamina = Math.max(0, this.stamina - BLOCK_DRAIN_PER_SEC * Math.max(0, dt));
+      if (this.stamina === 0) {
+        const heldInputs = BLOCK_INPUTS.filter(key => this.held.has(key));
+        for (const key of heldInputs) {
+          this.held.delete(key);
+          this.ignoreUntilRelease.add(key);
+        }
+        this.activeDefense = null;
+        this.dodgeSide = null;
+      }
+    }
+
     // Negative lateral = player-left (contract §2A).
     const body = this.body();
     const target = body === 'lean_left' ? -SLIP_TARGET : body === 'lean_right' ? SLIP_TARGET : 0;
@@ -188,10 +216,12 @@ export class SimulatedCvProvider implements CvProvider {
     const now = this.now();
     // Match the server's fighter-wide lock. Discrete punch events during recovery drop.
     if (this.trackingState(now) !== 'good' || now < this.actionReadyAt) return;
+    if (this.stamina < PUNCH_STAMINA[type]) return;
     if (this.activeDefense || this.requestedDefense()) return;
     if (this.punchUntil[hand] > now) return;
     const timing = PUNCH_LOCK_MS[type];
     this.actionReadyAt = now + Math.max(timing.recovery, timing.startup + 150);
+    this.stamina -= PUNCH_STAMINA[type];
     this.punchUntil[hand] = now + PUNCH_EXTEND_MS[type];
     this.emit(hand === 'left' ? 'punch_left' : 'punch_right', now, type);
   }
@@ -230,7 +260,9 @@ export class SimulatedCvProvider implements CvProvider {
 
     const requested = this.requestedDefense();
     if (requested && now >= this.actionReadyAt) {
+      if (this.stamina <= 0 || (requested.startsWith('dodge_') && this.stamina < DODGE_STAMINA)) return;
       this.activeDefense = { action: requested, startedAt: now };
+      if (requested.startsWith('dodge_')) this.stamina -= DODGE_STAMINA;
     }
   }
 

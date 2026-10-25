@@ -206,6 +206,7 @@ function isFirstPerson(): boolean {
 function refresh() {
   dirty = false;
   view = server.currentMatch();
+  sim.setStamina(view?.me.stamina ?? 0);
   rings = server.rings();
   // A fight of mine starting (say, from the queue) pulls me out of spectating.
   if (view?.match.status === 'active') hudState.spectating = false;

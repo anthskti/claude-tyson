@@ -13,6 +13,7 @@ type TestProvider = SimulatedCvProvider & {
 function setup() {
   let now = 0;
   const provider = new SimulatedCvProvider(() => now);
+  provider.setStamina(200);
   const internal = provider as TestProvider;
   internal.calibrationId = 'test-calibration';
   internal.calibratingUntil = 0;
@@ -46,6 +47,34 @@ describe('SimulatedCvProvider action rules', () => {
     setNow(270);
     provider.press('c');
     expect(internal.pending.map(event => event.punchType)).toEqual(['left_straight', 'right_straight']);
+  });
+
+  test('rejects punches when the latest server stamina cannot cover the cost', () => {
+    const { provider, internal } = setup();
+    provider.setStamina(4);
+    provider.press('j');
+    expect(internal.pending).toHaveLength(0);
+
+    provider.setStamina(5);
+    provider.press('j');
+    expect(internal.pending.map(event => event.punchType)).toEqual(['left_straight']);
+  });
+
+  test('requires 20 stamina to dodge and positive stamina to block', () => {
+    const lowDodge = setup();
+    lowDodge.provider.setStamina(19);
+    lowDodge.provider.press('a');
+    expect(lowDodge.tick(0).pose?.body).toBe('neutral');
+
+    const enoughDodge = setup();
+    enoughDodge.provider.setStamina(20);
+    enoughDodge.provider.press('a');
+    expect(enoughDodge.tick(0).pose?.body).toBe('lean_left');
+
+    const noBlock = setup();
+    noBlock.provider.setStamina(0);
+    noBlock.provider.press('b');
+    expect(noBlock.tick(0).pose?.guards).toEqual({ left: 'neutral', right: 'neutral' });
   });
 
   test('forces block release at two seconds and applies release cooldown', () => {

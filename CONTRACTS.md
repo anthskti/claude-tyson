@@ -69,8 +69,8 @@ resolution; client timestamps are not authoritative.
 
 ## Authoritative combat rules
 
-Health is stored as integer tenths: `1000` means 100 HP. Stamina is a server-owned
-floating value from 0 to 100. Damage, stamina costs, startup, and recovery below are the
+Health is stored as integer tenths: `100` means 10 HP (the starting health). Stamina is a server-owned
+floating value from 0 to 200. Damage, stamina costs, startup, and recovery below are the
 current first-pass tuning in `spacetimedb/src/rules.ts`.
 
 | Punch | Damage | Startup | Recovery | Stamina |
@@ -97,12 +97,12 @@ current first-pass tuning in `spacetimedb/src/rules.ts`.
 - Block and dodge cannot start while another action/recovery lock is active or switch
   directly into each other. The server is authoritative; late or invalid requests do not
   create a queued action.
-- Stamina regenerates at 12 per second when not actively blocking, dodging, or under a
+- Stamina regenerates at 18 per second when not actively blocking, dodging, or under a
   punch recovery lock. Punches require enough stamina to pay their listed cost.
 - A successful dodge opens a 700 ms counter window. Attacks inside it are marked as
   counters, and the bot favors a straight counter. The current resolver does not apply a
   separate counter damage multiplier.
-- A match lasts 180 seconds. Reaching zero health ends it immediately by KO; otherwise
+- A match starts at 10 HP and lasts 30 seconds. Reaching zero health ends it immediately by KO; otherwise
   the higher-health fighter wins the decision. KO is terminal.
 - If the defender's pose is unusable at impact, the attack is `unscorable` and causes no
   damage. Unscorable attacks are excluded from fight statistics.
