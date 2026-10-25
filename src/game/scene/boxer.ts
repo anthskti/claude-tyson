@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Body, Guard, PunchType } from '../cv/contract';
 import { BoxingAnimationController, type ClipSlot, type HeldSlot } from './animation-controller';
 
@@ -10,6 +11,9 @@ import { BoxingAnimationController, type ClipSlot, type HeldSlot } from './anima
 // PvE shows the Claude-themed bot as authored. PvP reuses the same rig and clips as a
 // human-sized fighter in their corner colour: the orange in its textures is recoloured,
 // the Claude logo is hidden, and it's scaled so both players are eye to eye.
+//
+// Every boxer in the arena clones one load of the file, and boxers in the same corner
+// share recoloured materials, so twelve fighters cost one download and two recolours.
 
 export type Hand = 'left' | 'right';
 export type AnyPunch = PunchType;
@@ -29,6 +33,10 @@ const BOT_POSITION = new THREE.Vector3(0, 0, -2.6);
 const PLAYER_HEAD_TOP_M = 1.73;
 // The PvE bot stands a little taller than the player, but not a giant.
 const BOT_HEAD_TOP_M = 1.95;
+
+let botAsset: Promise<GLTF> | undefined;
+const loadBot = () => (botAsset ??= new GLTFLoader().loadAsync(BOT_URL));
+const VARIANTS: Partial<Record<Corner, Map<THREE.Material, THREE.Material>>> = {};
 
 /** Copy of `tex` with its saturated orange pixels moved to `color`'s hue, keeping shading. */
 function recolorOrange(tex: THREE.Texture, color: number): THREE.Texture {
@@ -122,26 +130,30 @@ export class Boxer {
   private model: THREE.Object3D | null = null;
   private headTop = 0; // model units, in the idle stance
   private meshes: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] }[] = [];
-  private variants: Partial<Record<Corner, Map<THREE.Material, THREE.Material>>> = {};
+  private base: THREE.Vector3;
 
-  constructor() {
-    this.root.position.copy(BOT_POSITION);
-    void new GLTFLoader().loadAsync(BOT_URL).then(gltf => {
-      gltf.scene.traverse(o => {
+  /** Defaults to the first-person opponent: across the ring, facing the camera (+Z). */
+  constructor(opts: { position?: THREE.Vector3; facing?: number } = {}) {
+    this.base = (opts.position ?? BOT_POSITION).clone();
+    this.root.position.copy(this.base);
+    this.root.rotation.y = opts.facing ?? 0;
+    void loadBot().then(gltf => {
+      const model = cloneSkinned(gltf.scene);
+      model.traverse(o => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         this.meshes.push({ mesh, original: mesh.material });
       });
-      this.anim = new BoxingAnimationController(gltf.scene, gltf.animations);
+      this.anim = new BoxingAnimationController(model, gltf.animations);
       this.anim.playIdle();
       // Measure in the settled idle stance, not the bind pose, so eye level matches in play.
       this.anim.update(1);
-      gltf.scene.updateMatrixWorld(true);
-      this.headTop = new THREE.Box3().setFromObject(gltf.scene, true).max.y;
-      this.model = gltf.scene;
-      this.root.add(gltf.scene);
+      model.updateMatrixWorld(true);
+      this.headTop = new THREE.Box3().setFromObject(model, true).max.y;
+      this.model = model;
+      this.root.add(model);
       this.applyLook();
       if (this.down) this.anim.playKo();
     }).catch(err => {
@@ -159,7 +171,7 @@ export class Boxer {
   private applyLook() {
     if (!this.model) return;
     const corner = this.look === 'claude' ? null : this.look;
-    const variants = corner ? (this.variants[corner] ??= new Map()) : null;
+    const variants = corner ? (VARIANTS[corner] ??= new Map()) : null;
     for (const { mesh, original } of this.meshes) {
       mesh.visible = !corner || mesh.name !== LOGO_MESH;
       if (!variants) {
@@ -222,7 +234,7 @@ export class Boxer {
     if (this.flash && t > this.flash.until) this.flash = null;
 
     this.lateral += (this.targetLateral - this.lateral) * Math.min(1, dt * 10);
-    this.root.position.x = BOT_POSITION.x + this.lateral;
+    this.root.position.x = this.base.x + this.lateral;
 
     if (!this.down) {
       const pose = this.flash ?? this.pose;
