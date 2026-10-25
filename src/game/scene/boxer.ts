@@ -1,10 +1,21 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Body, Guard, PunchType } from '../cv/contract';
 import { BoxingAnimationController, type ClipSlot, type HeldSlot } from './animation-controller';
 
 // Gameplay uses the same animation controller for the bot and PvP boxer assets.
 // First-person gloves stay primitive: there is no player body model.
+<<<<<<< HEAD
+=======
+//
+// PvE shows the Claude-themed bot as authored. PvP reuses the same rig and clips as a
+// human-sized fighter in their corner colour: the orange in its textures is recoloured,
+// the Claude logo is hidden, and it's scaled so both players are eye to eye.
+//
+// Every boxer in the arena clones one load of the file, and boxers in the same corner
+// share recoloured materials, so twelve fighters cost one download and two recolours.
+>>>>>>> origin/main
 
 export type Hand = 'left' | 'right';
 export type AnyPunch = PunchType;
@@ -28,6 +39,62 @@ const PLAYER_HEAD_TOP_M = 1.73;
 // The PvE bot stands a little taller than the player, but not a giant.
 const BOT_HEAD_TOP_M = 1.95;
 
+<<<<<<< HEAD
+=======
+let botAsset: Promise<GLTF> | undefined;
+const loadBot = () => (botAsset ??= new GLTFLoader().loadAsync(BOT_URL));
+const VARIANTS: Partial<Record<Corner, Map<THREE.Material, THREE.Material>>> = {};
+
+/** Copy of `tex` with its saturated orange pixels moved to `color`'s hue, keeping shading. */
+function recolorOrange(tex: THREE.Texture, color: number): THREE.Texture {
+  const img = tex.image as CanvasImageSource & { width: number; height: number };
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const target = { h: 0, s: 0, l: 0 };
+  new THREE.Color(color).getHSL(target);
+  const c = new THREE.Color();
+  const hsl = { h: 0, s: 0, l: 0 };
+  const rgb = { r: 0, g: 0, b: 0 };
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const max = Math.max(px[i], px[i + 1], px[i + 2]);
+    const min = Math.min(px[i], px[i + 1], px[i + 2]);
+    // Red/orange paint (trunks, hair, shoes, gloves). Skin shares the hue but its
+    // HSV saturation is ~0.25 against ≥0.65 for paint.
+    if (max < 40 || (max - min) / max < 0.5) continue;
+    c.setRGB(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255, THREE.SRGBColorSpace);
+    c.getHSL(hsl, THREE.SRGBColorSpace);
+    if (hsl.h > 0.13 && hsl.h < 0.95) continue;
+    c.setHSL(target.h, Math.max(hsl.s * 0.85, target.s * 0.8), hsl.l * 0.9, THREE.SRGBColorSpace);
+    c.getRGB(rgb, THREE.SRGBColorSpace);
+    px[i] = Math.round(rgb.r * 255);
+    px[i + 1] = Math.round(rgb.g * 255);
+    px[i + 2] = Math.round(rgb.b * 255);
+  }
+  ctx.putImageData(data, 0, 0);
+  const out = new THREE.CanvasTexture(canvas);
+  out.flipY = tex.flipY;
+  out.colorSpace = tex.colorSpace;
+  out.wrapS = tex.wrapS;
+  out.wrapT = tex.wrapT;
+  out.magFilter = tex.magFilter;
+  out.minFilter = tex.minFilter;
+  return out;
+}
+
+/** Same material with every texture slot that holds paint recoloured. */
+function recolorMaterial(mat: THREE.Material, color: number): THREE.Material {
+  const m = mat.clone() as THREE.MeshStandardMaterial;
+  if (m.map) m.map = recolorOrange(m.map, color);
+  if (m.emissiveMap) m.emissiveMap = recolorOrange(m.emissiveMap, color);
+  return m;
+}
+
+>>>>>>> origin/main
 /**
  * Glove offset from guard for a punch at progress `s` (0 = guard, 1 = full extension),
  * in a frame where +forward is toward the target, +up is up, and `out` points away
@@ -71,6 +138,7 @@ export class Boxer {
   private loadVersion = 0;
   private model: THREE.Object3D | null = null;
   private headTop = 0; // model units, in the idle stance
+<<<<<<< HEAD
 
   constructor() {
     this.root.position.copy(BOT_POSITION);
@@ -85,11 +153,25 @@ export class Boxer {
     void new GLTFLoader().loadAsync(MODEL_URL[look]).then(gltf => {
       if (version !== this.loadVersion) return;
       gltf.scene.traverse(o => {
+=======
+  private meshes: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] }[] = [];
+  private base: THREE.Vector3;
+
+  /** Defaults to the first-person opponent: across the ring, facing the camera (+Z). */
+  constructor(opts: { position?: THREE.Vector3; facing?: number } = {}) {
+    this.base = (opts.position ?? BOT_POSITION).clone();
+    this.root.position.copy(this.base);
+    this.root.rotation.y = opts.facing ?? 0;
+    void loadBot().then(gltf => {
+      const model = cloneSkinned(gltf.scene);
+      model.traverse(o => {
+>>>>>>> origin/main
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       });
+<<<<<<< HEAD
       if (this.model) this.root.remove(this.model);
       this.anim = new BoxingAnimationController(gltf.scene, gltf.animations);
       this.anim.playIdle();
@@ -101,12 +183,54 @@ export class Boxer {
       this.root.add(gltf.scene);
       const scale = this.headTop > 0 ? (look === 'claude' ? BOT_HEAD_TOP_M : PLAYER_HEAD_TOP_M) / this.headTop : 1;
       gltf.scene.scale.setScalar(scale);
+=======
+      this.anim = new BoxingAnimationController(model, gltf.animations);
+      this.anim.playIdle();
+      // Measure in the settled idle stance, not the bind pose, so eye level matches in play.
+      this.anim.update(1);
+      model.updateMatrixWorld(true);
+      this.headTop = new THREE.Box3().setFromObject(model, true).max.y;
+      this.model = model;
+      this.root.add(model);
+      this.applyLook();
+>>>>>>> origin/main
       if (this.down) this.anim.playKo();
     }).catch(err => {
       if (version === this.loadVersion) console.error(`${MODEL_URL[look]} failed to load`, err);
     });
   }
 
+<<<<<<< HEAD
+=======
+  /** 'claude' for PvE; a corner colour for a human opponent in PvP. */
+  setLook(look: BoxerLook) {
+    if (look === this.look) return;
+    this.look = look;
+    this.applyLook();
+  }
+
+  private applyLook() {
+    if (!this.model) return;
+    const corner = this.look === 'claude' ? null : this.look;
+    const variants = corner ? (VARIANTS[corner] ??= new Map()) : null;
+    for (const { mesh, original } of this.meshes) {
+      mesh.visible = !corner || mesh.name !== LOGO_MESH;
+      if (!variants) {
+        mesh.material = original;
+        continue;
+      }
+      const swap = (m: THREE.Material) => {
+        let v = variants.get(m);
+        if (!v) variants.set(m, (v = recolorMaterial(m, CORNER_COLOR[corner!])));
+        return v;
+      };
+      mesh.material = Array.isArray(original) ? original.map(swap) : swap(original);
+    }
+    const scale = this.headTop > 0 ? (corner ? PLAYER_HEAD_TOP_M : BOT_HEAD_TOP_M) / this.headTop : 1;
+    this.model.scale.setScalar(scale);
+  }
+
+>>>>>>> origin/main
   /** Server telegraph. Does not decide whether the punch lands. */
   throwPunch(hand: Hand, type: AnyPunch, _cueMs: number, _impactMs: number) {
     if (this.down) return;
@@ -152,7 +276,7 @@ export class Boxer {
     if (this.flash && t > this.flash.until) this.flash = null;
 
     this.lateral += (this.targetLateral - this.lateral) * Math.min(1, dt * 10);
-    this.root.position.x = BOT_POSITION.x + this.lateral;
+    this.root.position.x = this.base.x + this.lateral;
 
     if (!this.down) {
       const pose = this.flash ?? this.pose;

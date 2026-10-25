@@ -16,4 +16,5 @@ export default __t.row({
   status: __t.string(),
   startedAt: __t.timestamp().name("started_at"),
   endsAt: __t.timestamp().name("ends_at"),
+  ring: __t.u8(),
 });

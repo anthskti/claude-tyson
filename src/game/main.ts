@@ -2,6 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import { buildArena, loadRing } from './scene/ring';
 import { Boxer, PlayerGloves, cornerOf, type AnyPunch } from './scene/boxer';
+import { Arena, RING_COUNT } from './scene/arena';
 import { SimulatedCvProvider } from './cv/simulatedProvider';
 import { CvBridge } from './cv/bridge';
 import { BrowserCv } from './cv/browserCv';
@@ -10,8 +11,8 @@ import { CameraFeed } from './cv/cameraFeed';
 import { GuardCalibration, GuardClassifier, type GuardCalibrationData } from './cv/guard';
 import { poseOf, type Body, type CvProvider, type Guard, type Observation, type PoseState } from './cv/contract';
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
-import { GameServer, type MatchView } from './net/server';
-import { Hud, type HudState, type InputMode } from './hud';
+import { GameServer, type MatchView, type RingView } from './net/server';
+import { Hud, type HudState, type InputMode, type RingSummary } from './hud';
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -28,9 +29,15 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 const scene = new THREE.Scene();
 buildArena(scene);
+// The player's own ring, drawn first-person at the origin. Every other ring, and this
+// one while spectating, belongs to the arena.
+const firstPerson = new THREE.Group();
+scene.add(firstPerson);
 loadRing().then(ring => {
-  if (alive) scene.add(ring);
+  if (alive) firstPerson.add(ring);
 });
+const arena = new Arena();
+scene.add(arena.root);
 
 // First-person: the player stands just south of centre, facing the opponent (-Z).
 const EYE = new THREE.Vector3(0, 1.62, 0.55);
@@ -45,7 +52,13 @@ const gloves = new PlayerGloves();
 camera.add(gloves.root);
 
 const opponent = new Boxer();
-scene.add(opponent.root);
+firstPerson.add(opponent.root);
+
+// Spectator camera: a slow orbit outside the ropes of the watched ring.
+const ORBIT_RADIUS_M = 9.5;
+const ORBIT_HEIGHT_M = 5;
+const ORBIT_RAD_PER_S = 0.12;
+let orbitAngle = 0.6;
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -70,8 +83,17 @@ function savedInput(): InputMode {
 }
 const hudState: HudState = {
   server: 'connecting', tracking: 'calibrating', queued: false, input: savedInput(), camera: 'off',
+  rings: [], queueLength: 0, spectating: false, watch: 0, names: ['YOU', 'OPPONENT'],
 };
 let view: MatchView | undefined;
+let rings: RingView[] = [];
+// Set by a ring picked in the menu or the spectator bar; otherwise the busiest ring is shown.
+let pickedRing: number | undefined;
+// Server updates from every ring land many times a second; redraw the HUD once per frame.
+let dirty = true;
+const markDirty = () => {
+  dirty = true;
+};
 let latest: Observation | undefined;
 let myPose: PoseState = { body: 'neutral', guards: { left: 'neutral', right: 'neutral' } };
 let shakeUntil = 0;
@@ -82,7 +104,10 @@ const server = new GameServer({
     hudState.serverDetail = detail;
     refresh();
   },
-  onChange: refresh,
+  onChange: markDirty,
+  onError: message => hud.toast(message, 'bad'),
+  onRingAttack: atk => arena.attack(atk),
+  onRingAttackResolved: atk => arena.resolved(atk),
   onAttack(atk, v) {
     if (v.match.status !== 'active' || atk.attackerSlot === v.me.slot) return;
     const cueMs = Number(atk.cueAt.microsSinceUnixEpoch / 1000n);
@@ -130,18 +155,83 @@ const hud = new Hud({
   },
   cancelCalibration: () => endCalibration(false),
   skipCalibration: () => guardClassifier && endCalibration(true),
+  spectate: () => setSpectating(true),
+  leaveSpectate: () => setSpectating(false),
+  watchPrev: () => watch(hudState.watch - 1),
+  watchNext: () => watch(hudState.watch + 1),
+  watch: ring => {
+    watch(ring);
+    setSpectating(true);
+  },
 });
 
+function setSpectating(on: boolean) {
+  hudState.spectating = on;
+  refresh();
+}
+
+function watch(ring: number) {
+  pickedRing = (ring + RING_COUNT) % RING_COUNT;
+  refresh();
+}
+
+const MODE_LABEL: Record<string, string> = { pvp: 'PvP', bot: 'vs bot', exhibition: 'Exhibition' };
+
+function summarize(r: RingView): RingSummary {
+  const m = r.match;
+  if (!m) return { ring: r.ring, free: true, label: 'Empty' };
+  const [red, blue] = r.fighters;
+  const hp = (f: typeof red) => (f ? Math.max(0, Math.round(f.health / 10)) : 0);
+  const result = m.status === 'active' ? '' : ' · ended';
+  return {
+    ring: r.ring,
+    free: m.mode === 'exhibition' || m.status !== 'active',
+    label: MODE_LABEL[m.mode] ?? m.mode,
+    fighters: `${server.nameOf(red)} ${hp(red)} · ${hp(blue)} ${server.nameOf(blue)}${result}`,
+  };
+}
+
+/** The ring the spectator camera shows: the picked one, else a human fight, else any fight. */
+function watchedRing(): number {
+  if (pickedRing !== undefined) return pickedRing;
+  const live = rings.filter(r => r.match?.status === 'active');
+  return (live.find(r => r.match!.mode !== 'exhibition') ?? live[0] ?? rings[0])?.ring ?? 0;
+}
+
+/** First-person while I'm in a match or looking at its result; otherwise the arena. */
+function isFirstPerson(): boolean {
+  return !!view && !hudState.spectating;
+}
+
 function refresh() {
+  dirty = false;
   view = server.currentMatch();
+  rings = server.rings();
+  // A fight of mine starting (say, from the queue) pulls me out of spectating.
+  if (view?.match.status === 'active') hudState.spectating = false;
   hudState.view = view;
   hudState.result = view ? server.result(view.match.id) : undefined;
   hudState.profile = server.profile();
   hudState.queued = server.inQueue();
+  hudState.queueLength = server.queueLength();
+  hudState.rings = rings.map(summarize);
+  hudState.watch = watchedRing();
+  const watched = rings[hudState.watch];
+  hudState.names = isFirstPerson()
+    ? ['YOU', view?.match.mode === 'bot' ? 'BOT' : server.nameOf(view?.opponent)]
+    : [server.nameOf(watched?.fighters[0]), server.nameOf(watched?.fighters[1])];
   // The Claude-themed bot is PvE only; a PvP opponent is a fighter in their corner colour.
   opponent.setLook(view?.match.mode === 'pvp' ? cornerOf(view.opponent.slot) : 'claude');
   gloves.setCorner(cornerOf(view?.me.slot ?? 0));
+  arena.sync(rings);
   hud.render(hudState);
+}
+
+/** The watched ring as a MatchView, red as `me`, for the health bars and timer. */
+function watchedView(): MatchView | undefined {
+  const r = rings[hudState.watch];
+  if (!r?.match || r.fighters.length < 2) return undefined;
+  return { match: r.match, me: r.fighters[0], opponent: r.fighters[1] };
 }
 
 // ─── CV input ──────────────────────────────────────────────────────────────
@@ -317,6 +407,22 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = performance.now();
+  if (dirty) refresh();
+
+  const fp = isFirstPerson();
+  firstPerson.visible = fp;
+  gloves.root.visible = fp;
+  arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
+  arena.update(dt, Date.now());
+  if (!fp) {
+    orbitAngle += dt * ORBIT_RAD_PER_S;
+    camera.position.set(Math.sin(orbitAngle) * ORBIT_RADIUS_M, ORBIT_HEIGHT_M, Math.cos(orbitAngle) * ORBIT_RADIUS_M);
+    camera.lookAt(0, 1.1, 0);
+    hud.tick(watchedView());
+    renderer.render(scene, camera);
+    return;
+  }
+  camera.rotation.y = 0;
 
   // Player dodge: slide + slight roll from the CV lateral displacement.
   const lateral = latest?.features.lateralDisplacementBodyWidths ?? 0;

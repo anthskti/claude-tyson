@@ -255,3 +255,80 @@ test('one glove up is not a guard: only both gloves block and drain stamina', ()
   guard('block', 'block');
   expect(me().stamina).toBeCloseTo(98);
 });
+
+// Matches RING_COUNT in index.ts (a module may only export reducers and tables).
+const RING_COUNT = 4;
+const fighterAuth = (sub: string) => TestAuth.fromJwtPayload(
+  JSON.stringify({ iss: 'localhost', sub, iat: 0, exp: 9999999999 }),
+  ConnectionId.random(),
+);
+const active = (h: any) => [...h.db.fightMatch.status.filter('active')] as any[];
+const tick = (h: any) => h.withReducerTx(fighterAuth('scheduler'), (ctx: any) =>
+  (mod.arenaTick as any)(ctx, { timer: { scheduledId: 1n, scheduledAt: undefined } }));
+
+test('every match takes its own ring, and a full arena turns new fights away', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  for (let i = 0; i < RING_COUNT; i++) h.withReducerTx(fighterAuth(`p${i}`), ctx => (mod.startBotMatch as any)(ctx));
+  expect(active(h).map(m => m.ring).sort()).toEqual([0, 1, 2, 3]);
+
+  expect(() => h.withReducerTx(fighterAuth('p-extra'), ctx => (mod.startBotMatch as any)(ctx))).toThrow(/all rings are full/);
+  expect(active(h)).toHaveLength(RING_COUNT);
+});
+
+test('the PvP queue waits for a ring and pairs as soon as a fight ends', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  for (let i = 0; i < RING_COUNT; i++) h.withReducerTx(fighterAuth(`p${i}`), ctx => (mod.startBotMatch as any)(ctx));
+  h.withReducerTx(fighterAuth('a'), ctx => (mod.joinPvpQueue as any)(ctx));
+  h.withReducerTx(fighterAuth('b'), ctx => (mod.joinPvpQueue as any)(ctx));
+  expect([...h.db.queueEntry.iter()]).toHaveLength(2);
+
+  const freed = active(h).find(m => m.ring === 2);
+  h.withReducerTx(fighterAuth('p2'), ctx => (mod.forfeit as any)(ctx, { matchId: freed.id }));
+
+  expect([...h.db.queueEntry.iter()]).toHaveLength(0);
+  const pvp = active(h).find(m => m.mode === 'pvp');
+  expect(pvp?.ring).toBe(2);
+  expect([...h.db.fighter.matchId.filter(pvp.id)].every(f => f.identity)).toBe(true);
+});
+
+test('bots fight an exhibition in a spare ring and give it up only when the arena is full', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  const viewer = fighterAuth('viewer');
+
+  tick(h);
+  expect(active(h)).toHaveLength(0); // nobody online to watch
+  h.withReducerTx(viewer, ctx => (mod.onConnect as any)(ctx));
+  tick(h);
+  const [show] = active(h);
+  expect(show.mode).toBe('exhibition');
+  expect(show.ring).toBe(RING_COUNT - 1);
+  expect([...h.db.fighter.matchId.filter(show.id)].some(f => f.identity)).toBe(false);
+
+  // Both bots throw: the tick picks either corner as the attacker.
+  const slots = new Set<number>();
+  for (let i = 0; i < 40; i++) {
+    h.withReducerTx(viewer, ctx => (mod.botAct as any)(ctx, { timer: { scheduledId: 0n, scheduledAt: undefined, matchId: show.id } }));
+    clock.advance(ms(2000));
+  }
+  for (const a of h.db.attack.matchId.filter(show.id)) slots.add(a.attackerSlot);
+  expect([...slots].sort()).toEqual([0, 1]);
+
+  // Real fights fill the other rings around it.
+  for (let i = 0; i < RING_COUNT - 1; i++) h.withReducerTx(fighterAuth(`p${i}`), ctx => (mod.startBotMatch as any)(ctx));
+  expect(h.db.fightMatch.id.find(show.id)?.status).toBe('active');
+
+  // The last real fight takes the exhibition's ring.
+  h.withReducerTx(fighterAuth('last'), ctx => (mod.startBotMatch as any)(ctx));
+  expect(h.db.fightMatch.id.find(show.id)?.status).toBe('finished');
+  expect(active(h).find(m => m.ring === show.ring)?.mode).toBe('bot');
+
+  // The stopped exhibition's rows go once spectators have seen the result.
+  const [cleanup] = [...h.db.exhibitionCleanup.iter()];
+  h.withReducerTx(viewer, ctx => (mod.cleanupExhibition as any)(ctx, { timer: cleanup }));
+  expect(h.db.fightMatch.id.find(show.id)).toBeFalsy();
+  expect([...h.db.attack.matchId.filter(show.id)]).toHaveLength(0);
+  expect([...h.db.fighter.matchId.filter(show.id)]).toHaveLength(0);
+});

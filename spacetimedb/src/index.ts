@@ -1,7 +1,8 @@
 // Claude Tyson — authoritative fight server.
 //
 // Covers the server half of the integration flow:
-//   1. Match creation      — startBotMatch / joinPvpQueue
+//   1. Match creation      — startBotMatch / joinPvpQueue, each match in one of RING_COUNT rings;
+//                            a bot exhibition fills a spare ring until a real fight needs it
 //   2. Motion input        — updatePose (body + guard state) + submitMotionEvent (punches)
 //   3. Combat resolution   — attacks resolve at their scheduled impact time against the
 //                            defender's *current* body/guard via rules.ts
@@ -51,6 +52,11 @@ const DODGE_COOLDOWN_MS = 260;
 const WINDOW_MS = 6_000;
 const BOT_PAUSED_RETRY_MS = 500;
 const BOT_COUNTER_DELAY_MS = 250;
+// Keep in step with RING_COUNT in src/game/scene/arena.ts.
+const RING_COUNT = 4;
+const ARENA_TICK_MS = 3_000;
+// A finished exhibition stays visible this long before its rows are deleted.
+const EXHIBITION_LINGER_MS = 8_000;
 
 const BOT_DEFAULTS = {
   aggression: 0.5,
@@ -126,10 +132,11 @@ const fightMatch = table(
   { name: 'fight_match', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
-    mode: t.string(), // 'bot' | 'pvp'
+    mode: t.string(), // 'bot' | 'pvp' | 'exhibition' (bot vs bot)
     status: t.string().index('btree'), // 'active' | 'finished'
     startedAt: t.timestamp(),
     endsAt: t.timestamp(),
+    ring: t.u8().default(0), // 0..RING_COUNT-1; at most one active match per ring
   }
 );
 
@@ -290,6 +297,25 @@ const fightWindow = table(
   }
 );
 
+// Starts an exhibition in a spare ring and pairs the queue.
+const arenaTimer = table(
+  { name: 'arena_timer' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+  }
+);
+
+// One-shot: deletes a finished exhibition after EXHIBITION_LINGER_MS.
+const exhibitionCleanup = table(
+  { name: 'exhibition_cleanup' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    matchId: t.u64(),
+  }
+);
+
 const fightResult = table(
   { name: 'fight_result', public: true },
   {
@@ -315,6 +341,8 @@ const spacetimedb = schema({
   roundTimer,
   windowTimer,
   fightWindow,
+  arenaTimer,
+  exhibitionCleanup,
   fightResult,
 });
 export default spacetimedb;
@@ -413,6 +441,10 @@ function fightersOf(ctx: Ctx, matchId: bigint): Fighter[] {
   return [...ctx.db.fighter.matchId.filter(matchId)].sort((a, b) => a.slot - b.slot);
 }
 
+function activeMatches(ctx: Ctx): Match[] {
+  return [...ctx.db.fightMatch.status.filter('active')];
+}
+
 function activeMatchFor(ctx: Ctx, who: Identity): Match | undefined {
   for (const m of ctx.db.fightMatch.status.filter('active')) {
     if (fightersOf(ctx, m.id).some(f => f.identity?.equals(who))) return m;
@@ -490,17 +522,51 @@ function insertFighter(ctx: Ctx, matchId: bigint, slot: number, identity: Identi
   });
 }
 
-function createMatch(ctx: Ctx, mode: 'bot' | 'pvp', p0: Identity, p1: Identity | undefined): Match {
+/** Rings with no active match, lowest first. */
+function freeRings(ctx: Ctx): number[] {
+  const used = new Set(activeMatches(ctx).map(m => m.ring));
+  return Array.from({ length: RING_COUNT }, (_, ring) => ring).filter(ring => !used.has(ring));
+}
+
+/** The lowest free ring for a real fight. With none free, the exhibition gives up its ring. */
+function claimRing(ctx: Ctx): number | undefined {
+  const free = freeRings(ctx);
+  if (free.length > 0) return free[0];
+  const exhibition = activeMatches(ctx).find(m => m.mode === 'exhibition');
+  if (!exhibition) return undefined;
+  finishMatch(ctx, exhibition, undefined, 'stopped');
+  return exhibition.ring;
+}
+
+/** Pair the two longest-waiting players while a ring is free. */
+function pairQueue(ctx: Ctx) {
+  for (;;) {
+    const waiting = [...ctx.db.queueEntry.iter()]
+      .sort((a, b) => Number(a.joinedAt.microsSinceUnixEpoch - b.joinedAt.microsSinceUnixEpoch));
+    if (waiting.length < 2) return;
+    const ring = claimRing(ctx);
+    if (ring === undefined) return;
+    const [a, b] = waiting;
+    ctx.db.queueEntry.identity.delete(a.identity);
+    ctx.db.queueEntry.identity.delete(b.identity);
+    createMatch(ctx, 'pvp', ring, a.identity, b.identity);
+  }
+}
+
+type Mode = 'bot' | 'pvp' | 'exhibition';
+
+function createMatch(ctx: Ctx, mode: Mode, ring: number, p0: Identity | undefined, p1: Identity | undefined): Match {
   const match = ctx.db.fightMatch.insert({
     id: 0n,
     mode,
     status: 'active',
     startedAt: ctx.timestamp,
     endsAt: after(ctx, ROUND_MS),
+    ring,
   });
   insertFighter(ctx, match.id, PLAYER_SLOT, p0);
   insertFighter(ctx, match.id, OPPONENT_SLOT, p1);
-  ensureProfile(ctx, p0);
+  if (p0) ensureProfile(ctx, p0);
   if (p1) ensureProfile(ctx, p1);
 
   ctx.db.roundTimer.insert({
@@ -509,7 +575,7 @@ function createMatch(ctx: Ctx, mode: 'bot' | 'pvp', p0: Identity, p1: Identity |
     matchId: match.id,
   });
 
-  if (mode === 'bot') {
+  if (mode !== 'pvp') {
     ctx.db.botStrategy.insert({
       matchId: match.id,
       revision: 0,
@@ -519,6 +585,9 @@ function createMatch(ctx: Ctx, mode: 'bot' | 'pvp', p0: Identity, p1: Identity |
       updatedAt: ctx.timestamp,
     });
     scheduleBot(ctx, match.id, 2000);
+  }
+  // Only a human's fight feeds the strategist.
+  if (mode === 'bot') {
     ctx.db.windowTimer.insert({
       scheduledId: 0n,
       scheduledAt: ScheduleAt.interval(BigInt(WINDOW_MS) * 1000n),
@@ -689,11 +758,47 @@ function finishMatch(ctx: Ctx, match: Match, winnerSlot: number | undefined, rea
       updatedAt: ctx.timestamp,
     });
   }
+
+  if (match.mode === 'exhibition') {
+    ctx.db.exhibitionCleanup.insert({
+      scheduledId: 0n,
+      scheduledAt: ScheduleAt.time(after(ctx, EXHIBITION_LINGER_MS).microsSinceUnixEpoch),
+      matchId: match.id,
+    });
+  } else {
+    // A real fight freed its ring: someone in the queue may be waiting for it.
+    pairQueue(ctx);
+  }
+}
+
+/** Exhibitions leave no profile or history; drop every row once spectators have seen the end. */
+function deleteMatch(ctx: Ctx, matchId: bigint) {
+  deleteAll(ctx.db.attack.matchId.filter(matchId), r => ctx.db.attack.id.delete(r.id));
+  deleteAll(ctx.db.fighter.matchId.filter(matchId), r => ctx.db.fighter.id.delete(r.id));
+  deleteAll(ctx.db.botTick.matchId.filter(matchId), r => ctx.db.botTick.scheduledId.delete(r.scheduledId));
+  deleteAll(ctx.db.roundTimer.matchId.filter(matchId), r => ctx.db.roundTimer.scheduledId.delete(r.scheduledId));
+  ctx.db.botStrategy.matchId.delete(matchId);
+  ctx.db.fightResult.matchId.delete(matchId);
+  ctx.db.fightMatch.id.delete(matchId);
+}
+
+function ensureArenaTimer(ctx: Ctx) {
+  if ([...ctx.db.arenaTimer.iter()].length > 0) return;
+  ctx.db.arenaTimer.insert({
+    scheduledId: 0n,
+    scheduledAt: ScheduleAt.interval(BigInt(ARENA_TICK_MS) * 1000n),
+  });
 }
 
 // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
+export const init = spacetimedb.init(ctx => {
+  ensureArenaTimer(ctx);
+});
+
 export const onConnect = spacetimedb.clientConnected(ctx => {
+  // init only runs on a fresh database; an upgraded one gets its timer here.
+  ensureArenaTimer(ctx);
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing) {
     ctx.db.player.identity.update({ ...existing, online: true });
@@ -726,22 +831,18 @@ export const setName = spacetimedb.reducer({ name: t.string() }, (ctx, { name })
 
 export const startBotMatch = spacetimedb.reducer(ctx => {
   if (activeMatchFor(ctx, ctx.sender)) throw new SenderError('already in a match');
+  const ring = claimRing(ctx);
+  if (ring === undefined) throw new SenderError('all rings are full');
   ctx.db.queueEntry.identity.delete(ctx.sender);
-  createMatch(ctx, 'bot', ctx.sender, undefined);
+  createMatch(ctx, 'bot', ring, ctx.sender, undefined);
 });
 
+// With every ring taken, players stay queued and are paired when a fight ends.
 export const joinPvpQueue = spacetimedb.reducer(ctx => {
   if (activeMatchFor(ctx, ctx.sender)) throw new SenderError('already in a match');
   if (ctx.db.queueEntry.identity.find(ctx.sender)) return;
-
-  const waiting = [...ctx.db.queueEntry.iter()]
-    .sort((a, b) => Number(a.joinedAt.microsSinceUnixEpoch - b.joinedAt.microsSinceUnixEpoch))[0];
-  if (waiting) {
-    ctx.db.queueEntry.identity.delete(waiting.identity);
-    createMatch(ctx, 'pvp', waiting.identity, ctx.sender);
-  } else {
-    ctx.db.queueEntry.insert({ identity: ctx.sender, joinedAt: ctx.timestamp });
-  }
+  ctx.db.queueEntry.insert({ identity: ctx.sender, joinedAt: ctx.timestamp });
+  pairQueue(ctx);
 });
 
 export const leavePvpQueue = spacetimedb.reducer(ctx => {
@@ -968,6 +1069,34 @@ export const endRound = spacetimedb.reducer(
   }
 );
 
+// Keeps the arena alive: a bot exhibition in a spare ring while someone is online to
+// watch, plus queue pairing as a backstop.
+export const arenaTick = spacetimedb.reducer(
+  { onSchedule: arenaTimer },
+  { timer: arenaTimer.rowType },
+  ctx => {
+    pairQueue(ctx);
+    if (activeMatches(ctx).some(m => m.mode === 'exhibition')) return;
+    // Let the last exhibition's result show before the next one starts.
+    if ([...ctx.db.exhibitionCleanup.iter()].length > 0) return;
+    // Players queued for PvP get the last ring before the bots do.
+    const free = freeRings(ctx);
+    if (free.length === 0 || [...ctx.db.queueEntry.iter()].length > 0) return;
+    if (![...ctx.db.player.iter()].some(p => p.online)) return;
+    // The highest free ring, so real fights fill from the first ring up.
+    createMatch(ctx, 'exhibition', free[free.length - 1], undefined, undefined);
+  }
+);
+
+export const cleanupExhibition = spacetimedb.reducer(
+  { onSchedule: exhibitionCleanup },
+  { timer: exhibitionCleanup.rowType },
+  (ctx, { timer }) => {
+    const match = ctx.db.fightMatch.id.find(timer.matchId);
+    if (match?.mode === 'exhibition' && match.status === 'finished') deleteMatch(ctx, match.id);
+  }
+);
+
 // ─── 4. Bot controller + strategist interface ──────────────────────────────
 
 export const botAct = spacetimedb.reducer(
@@ -976,7 +1105,16 @@ export const botAct = spacetimedb.reducer(
   (ctx, { timer }) => {
     const match = ctx.db.fightMatch.id.find(timer.matchId);
     if (!match || match.status !== 'active') return;
-    const [human, bot] = fightersOf(ctx, match.id);
+    const fighters = fightersOf(ctx, match.id);
+    let human: Fighter; // the target; another bot in an exhibition
+    let bot: Fighter;
+    if (match.mode === 'exhibition') {
+      // A bot inside its counter window fires back; otherwise either corner leads.
+      bot = fighters.find(f => !isPast(ctx, f.counterUntil)) ?? fighters[ctx.random.integerInRange(0, 1)];
+      human = fighters.find(f => f.slot !== bot.slot)!;
+    } else {
+      [human, bot] = fighters;
+    }
 
     // Pause bot offence while the player's tracking is unusable (contract §3).
     if (!poseIsUsable(ctx, human)) {
@@ -1011,7 +1149,8 @@ export const botAct = spacetimedb.reducer(
 
     // Higher aggression shortens the gap; jitter keeps it from being metronomic.
     const jitter = 0.75 + ctx.random() * 0.5;
-    const gap = s.punchIntervalMs * (1.5 - s.aggression) * jitter;
+    // Two bots share one tick in an exhibition, so it ticks faster.
+    const gap = s.punchIntervalMs * (1.5 - s.aggression) * jitter * (match.mode === 'exhibition' ? 0.6 : 1);
     scheduleBot(ctx, match.id, Math.max(telegraph + 150, gap));
   }
 );

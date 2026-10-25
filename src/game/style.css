@@ -119,3 +119,23 @@ code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; 
   font: inherit; font-weight: 700; padding: 8px 16px; border-radius: 6px; border: 0; cursor: pointer;
   background: rgba(255,255,255,0.12); color: var(--fg);
 }
+
+.menu .rings { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.menu .ring-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-width: 520px; width: 100%; }
+@media (max-width: 640px) { .menu .ring-list { grid-template-columns: 1fr; } }
+.menu button.ring-row {
+  font-size: 12px; font-weight: 400; padding: 8px 10px; text-align: left; background: var(--panel);
+  border: 1px solid rgba(255,255,255,0.15); color: var(--fg);
+}
+.menu button.ring-row.free { color: var(--dim); }
+.menu button.ring-row:hover { border-color: rgba(255,255,255,0.5); }
+.ring-row b { pointer-events: none; }
+
+.spectate {
+  position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 10px;
+  background: var(--panel); padding: 8px 12px; border-radius: 8px; max-width: calc(100% - 32px); flex-wrap: wrap; justify-content: center;
+}
+.spectate button {
+  font: inherit; font-weight: 700; padding: 6px 12px; border-radius: 6px; border: 0; cursor: pointer; background: var(--red); color: white;
+}
+.spectate button.secondary { background: transparent; border: 1px solid var(--fg); color: var(--fg); }
