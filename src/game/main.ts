@@ -517,12 +517,12 @@ function endCalibration(run: boolean) {
   renderCalibration();
   if (run) action?.();
 }
-// Camera classification runs in the browser by default (cv/browserCv.ts). The Python CV
-// bridge is the dev and tuning source: NEXT_PUBLIC_CV_SOURCE=bridge, `?cvSource=bridge`, or
-// `?cvBridge=ws://127.0.0.1:8799` (a different bridge, e.g. a synthetic one) picks it.
+// Camera input uses the Python CV bridge (cv-mvp, `python -m cv_mvp --camera 0`) by default.
+// Override: NEXT_PUBLIC_CV_SOURCE=browser, `?cvSource=browser` for in-browser MediaPipe,
+// or `?cvBridge=ws://127.0.0.1:8799` for a different bridge address.
 const params = new URLSearchParams(location.search);
 const bridgeUrl = params.get('cvBridge') ?? undefined;
-const sourceKind = params.get('cvSource') ?? (bridgeUrl ? 'bridge' : process.env.NEXT_PUBLIC_CV_SOURCE ?? 'browser');
+const sourceKind = params.get('cvSource') ?? (bridgeUrl ? 'bridge' : process.env.NEXT_PUBLIC_CV_SOURCE ?? 'bridge');
 const cameraHooks: CvHooks = {
   onStatus(status, detail) {
     if (status === 'connected' && hudState.camera !== 'connected') hud.toast('camera tracking on', 'good');
