@@ -1,104 +1,137 @@
-import { expect, test } from "vitest";
-import { createModuleTestHarness, TestAuth, TestClock } from "spacetimedb/server/test-utils";
-import { Timestamp, TimeDuration, ConnectionId } from "spacetimedb";
-import spacetimedb, * as mod from "./index";
+import { expect, test } from 'vitest';
+import { createModuleTestHarness, TestAuth, TestClock } from 'spacetimedb/server/test-utils';
+import { ConnectionId, TimeDuration, Timestamp } from 'spacetimedb';
+import spacetimedb, * as mod from './index';
 
 const ms = (n: number) => new TimeDuration(BigInt(n) * 1000n);
-
-test("fight runs end to end through the reducers", () => {
-  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
-  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
-  const auth = TestAuth.fromJwtPayload(
-    JSON.stringify({ iss: "localhost", sub: "abdullah", iat: 0, exp: 9999999999 }),
-    ConnectionId.random(),
-  );
-
-  h.withReducerTx(auth, (ctx) => (mod.startFight as any)(ctx, { capabilities: "punch_types,guard,dodge,bogus" }));
-  const fight = [...h.db.fight.iter()][0];
-  expect(fight.status).toBe("countdown");
-  expect(fight.capabilities).toBe("punch_types,guard,dodge"); // unknown capability dropped
-  expect(h.db.fightTick.count()).toBe(1n);
-
-  // Simulate the 50ms scheduler + the player throwing a punch every ~400ms
-  const tickRow = [...h.db.fightTick.iter()][0];
-  const actions = ["jab", "cross", "hook_l", "guard_on", "jab", "upper_r", "guard_off", "dodge_L"];
-  for (let i = 0; i < 2400; i++) {
-    clock.advance(ms(50));
-    h.withReducerTx(TestAuth.internal(), (ctx) => (mod.tick as any)(ctx, { arg: tickRow }));
-    if (i > 60 && i % 8 === 0) {
-      const f = h.db.fight.id.find(fight.id)!;
-      if (f.status !== "fighting") break;
-      h.withReducerTx(auth, (ctx) => (mod.act as any)(ctx, { fightId: fight.id, action: actions[(i / 8) % actions.length], eventId: `cv:${i}` }));
-    }
-  }
-
-  const end = h.db.fight.id.find(fight.id)!;
-  const events = [...h.db.combatEvent.iter()];
-  console.log(`status=${end.status} winner=${end.winner} t=${end.t}ms playerHp=${end.playerHp} cpuHp=${end.cpuHp} events=${events.length}`);
-  expect(["ko", "decision"]).toContain(end.status);
-  expect(events.some((e) => e.attacker === "cpu")).toBe(true); // bot fought back on its own via ticks
-  expect(events.some((e) => e.attacker === "player")).toBe(true);
-  expect(end.tickId).toBe(0n);
-  expect(h.db.fightTick.count()).toBe(0n); // ticking stopped after the fight ended
-
-  // someone else can't punch in your fight
-  const intruder = TestAuth.fromJwtPayload(
-    JSON.stringify({ iss: "localhost", sub: "intruder", iat: 0, exp: 9999999999 }),
-    ConnectionId.random(),
-  );
-  expect(() => h.withReducerTx(intruder, (ctx) => (mod.act as any)(ctx, { fightId: fight.id, action: "jab", eventId: "" }))).toThrow();
+const auth = () => TestAuth.fromJwtPayload(
+  JSON.stringify({ iss: 'localhost', sub: 'fighter', iat: 0, exp: 9999999999 }),
+  ConnectionId.random(),
+);
+const pose = (bodyState = 'neutral', leftGuard = 'neutral', rightGuard = 'neutral') => ({
+  matchId: 1n,
+  cvSessionId: 'session-1',
+  calibrationId: 'cal-1',
+  trackingState: 'good',
+  dodgeValid: true,
+  punchLeftValid: true,
+  punchRightValid: true,
+  bodyState,
+  leftGuard,
+  rightGuard,
+  lateral: 0,
 });
 
-test("coach lines, pause, lean and duplicate CV events through the reducers", () => {
+test('authoritative input spends stamina once per deduplicated punch', () => {
   const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
   const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
-  const auth = TestAuth.fromJwtPayload(
-    JSON.stringify({ iss: "localhost", sub: "abdullah", iat: 0, exp: 9999999999 }),
-    ConnectionId.random(),
-  );
-  h.withReducerTx(auth, (ctx) => (mod.startFight as any)(ctx, { capabilities: "punch_coarse,lean" }));
-  const id = [...h.db.fight.iter()][0].id;
-  const tickRow = [...h.db.fightTick.iter()][0];
-  const tick = (n: number) => { for (let i = 0; i < n; i++) { clock.advance(ms(50)); h.withReducerTx(TestAuth.internal(), (ctx) => (mod.tick as any)(ctx, { arg: tickRow })); } };
-  const act = (action: string, eventId = "") => h.withReducerTx(auth, (ctx) => (mod.act as any)(ctx, { fightId: id, action, eventId }));
-  tick(62); // past the countdown
+  const player = auth();
+  h.withReducerTx(player, ctx => (mod.startBotMatch as any)(ctx));
+  const match = [...h.db.fightMatch.iter()][0];
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose(), matchId: match.id }));
 
-  act("jab", "s1:7");
-  act("jab", "s1:7"); // same CV event delivered twice
-  tick(20);
-  const state = JSON.parse(h.db.fight.id.find(id)!.state);
-  expect(state.player.stats.attempted).toBe(1);
+  const action = {
+    matchId: match.id,
+    cvSessionId: 'session-1',
+    eventId: 'event-1',
+    eventType: 'punch_left',
+    punchType: 'left_straight',
+  };
+  h.withReducerTx(player, ctx => (mod.submitMotionEvent as any)(ctx, action));
+  h.withReducerTx(player, ctx => (mod.submitMotionEvent as any)(ctx, action));
 
-  act("lean_L");
-  act("tracking_lost");
-  tick(40); // 2s with no tracking
-  const paused = h.db.fight.id.find(id)!;
-  expect(paused.paused).toBe(true);
-  const tFrozen = paused.t;
-  tick(20);
-  expect(h.db.fight.id.find(id)!.t).toBe(tFrozen);
-  act("tracking_ok");
-  tick(10);
-  expect(h.db.fight.id.find(id)!.paused).toBe(false);
-  const types = [...h.db.combatEvent.iter()].map((e) => e.type);
-  expect(types).toContain("lean");
-  expect(types).toContain("pause");
-  expect(types).toContain("resume");
+  const me = [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity);
+  expect(me?.stamina).toBe(95);
+  expect([...h.db.attack.matchId.filter(match.id)]).toHaveLength(1);
+});
 
-  h.withReducerTx(auth, (ctx) => (mod.postCoachCue as any)(ctx, {
-    fightId: id, cueId: "c1", atMs: 5000, persona: "coach", trigger: "proactive", text: "Change your rhythm.",
-    priority: "normal", source: "claude", evidence: JSON.stringify(["3 blocked"]), tactic: "change_rhythm",
+test('dodge has a fixed cost and active block drains stamina over server time', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  const player = auth();
+  h.withReducerTx(player, ctx => (mod.startBotMatch as any)(ctx));
+  const match = [...h.db.fightMatch.iter()][0];
+
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose('lean_left'), matchId: match.id }));
+  let me = [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+  expect(me.stamina).toBe(80);
+
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose(), matchId: match.id }));
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, {
+    ...pose('lean_right'), matchId: match.id,
   }));
-  h.withReducerTx(auth, (ctx) => (mod.postCoachEffect as any)(ctx, {
-    fightId: id, cueId: "c1", appliedAtMs: 5000, evaluatedAtMs: 15000, outcome: "improved", nextDecision: "keep",
-    beforeHitRate: 0.2, afterHitRate: 0.5, confidence: 0.6, notes: "Hit rate 20% -> 50%.",
-  }));
-  expect([...h.db.coachCue.iter()].map((c) => c.text)).toEqual(["Change your rhythm."]);
-  expect([...h.db.coachEffect.iter()][0].outcome).toBe("improved");
+  me = [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+  expect(me.bodyState).toBe('neutral'); // Dodge recovery rejects a rapid re-trigger.
+  expect(me.stamina).toBe(80);
 
-  const stranger = TestAuth.fromJwtPayload(JSON.stringify({ iss: "localhost", sub: "x", iat: 0, exp: 9999999999 }), ConnectionId.random());
-  expect(() => h.withReducerTx(stranger, (ctx) => (mod.postCoachCue as any)(ctx, {
-    fightId: id, cueId: "c2", atMs: 1, persona: "coach", trigger: "proactive", text: "spam",
-    priority: "normal", source: "claude", evidence: "[]", tactic: "",
-  }))).toThrow();
+  clock.advance(ms(260));
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, {
+    ...pose('lean_right'), matchId: match.id,
+  }));
+  me = [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+  expect(me.bodyState).toBe('lean_right');
+  expect(me.stamina).toBeCloseTo(63.12);
+
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose(), matchId: match.id }));
+
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, {
+    ...pose('neutral', 'block', 'block'), matchId: match.id,
+  }));
+  clock.advance(ms(500));
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, {
+    ...pose('neutral', 'block', 'block'), matchId: match.id,
+  }));
+  me = [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+  expect(me.stamina).toBeCloseTo(61.12);
+});
+
+test('a fighter cannot punch while leaning or lean while a punch is out', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  const player = auth();
+  h.withReducerTx(player, ctx => (mod.startBotMatch as any)(ctx));
+  const match = [...h.db.fightMatch.iter()][0];
+  const punch = (eventId: string) => h.withReducerTx(player, ctx => (mod.submitMotionEvent as any)(ctx, {
+    matchId: match.id, cvSessionId: 'session-1', eventId, eventType: 'punch_left', punchType: 'left_straight',
+  }));
+  const me = () => [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose('lean_left'), matchId: match.id }));
+  expect(me().bodyState).toBe('lean_left');
+  punch('lean-punch');
+  expect([...h.db.attack.matchId.filter(match.id)]).toHaveLength(0);
+
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose(), matchId: match.id }));
+  clock.advance(ms(260));
+  punch('neutral-punch');
+  expect([...h.db.attack.matchId.filter(match.id)]).toHaveLength(1);
+  h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, { ...pose('lean_right'), matchId: match.id }));
+  expect(me().bodyState).toBe('neutral');
+});
+
+test('one glove up is not a guard: only both gloves block and drain stamina', () => {
+  const clock = new TestClock(new Timestamp(1_800_000_000_000_000n));
+  const h = createModuleTestHarness(spacetimedb, mod as any, { clock });
+  const player = auth();
+  h.withReducerTx(player, ctx => (mod.startBotMatch as any)(ctx));
+  const match = [...h.db.fightMatch.iter()][0];
+  const guard = (left: string, right: string) => h.withReducerTx(player, ctx => (mod.updatePose as any)(ctx, {
+    ...pose('neutral', left, right), matchId: match.id,
+  }));
+  const me = () => [...h.db.fighter.matchId.filter(match.id)].find(f => f.identity)!;
+
+  guard('block', 'neutral');
+  clock.advance(ms(500));
+  guard('block', 'neutral');
+  expect(me().stamina).toBe(100); // no drain: a single glove isn't blocking
+
+  guard('neutral', 'block');
+  clock.advance(ms(500));
+  guard('neutral', 'block');
+  expect(me().stamina).toBe(100);
+
+  guard('block', 'block');
+  clock.advance(ms(500));
+  guard('block', 'block');
+  expect(me().stamina).toBeCloseTo(98);
 });

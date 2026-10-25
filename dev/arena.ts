@@ -1,30 +1,12 @@
-// Dev arena: the engine + live AI coach running locally in the browser, keyboard controls.
-// Served by dev/server.ts (real Claude + Cartesia when keys are set) or opened as a plain file
-// (offline coach + the browser's built-in voice). Same LiveCoach the real game uses.
+// Standalone combat arena with keyboard and webcam input.
 import { createFight, applyInput, advance, drainEvents, CONFIG, type FightState, type Fighter, type Input } from "../engine/engine";
 import { attachKeyboard } from "../input/keyboard";
-import { LiveCoach, type CueInfo, type CoachStatus } from "../coach/liveCoach";
-import { engineRow } from "../coach/adapter";
-import { createCoachAudio } from "../coach/browserAudio";
-import { RULE_LINES } from "../coach/rules";
-import { offlineCoachResponse } from "../coach/offlineCoach";
-import type { CoachRequest, CoachResponse, Capability, VoiceCue, AdaptationResult } from "../shared/contracts";
 import { MotionEngine } from "../input/motion";
 
-const CAPS: Capability[] = ["punch_types", "guard", "dodge", "lean"]; // what the keyboard can express
-// Opened as a plain file there is no server: offline coach + built-in voice, no network calls.
-const standalone = location.protocol === "file:";
-const audio = createCoachAudio({ ttsUrl: standalone ? null : "/api/tts" });
-
 let s: FightState;
-let coach: LiveCoach;
 let t0 = 0;
 let started = false;
-let fightNo = 0;
 const log: string[] = [];
-let caption: { text: string; source: string; evidence: string[]; at: number } | null = null;
-let coachStatus: CoachStatus = "watching";
-const effects: { r: AdaptationResult; text: string }[] = [];
 const now = () => performance.now() - t0;
 const leanKeys = new Set<string>();
 
@@ -72,8 +54,6 @@ function drawCalibration() {
 async function enableWebcam() {
   if (camStatus !== "idle" || !vid) return;
   if (camBtn) { camBtn.disabled = true; camBtn.textContent = "⏳ Starting…"; }
-  // User gesture: unlock audio now (same as first keypress).
-  if (!started) audio.preload(Object.values(RULE_LINES).map((text) => ({ text })));
   camStatus = "loading";
 
   try {
@@ -153,34 +133,9 @@ async function enableWebcam() {
 camBtn?.addEventListener("click", enableWebcam);
 
 function newFight() {
-  fightNo++;
   s = createFight(Date.now() % 100000);
   t0 = performance.now();
   log.length = 0;
-  effects.length = 0;
-  caption = null;
-  audio.stop();
-  coach = new LiveCoach({
-    fightId: `arena-${fightNo}`, capabilities: CAPS, source: "keyboard",
-    wallNow: () => performance.now(),
-    requestCoach: async (req: CoachRequest) => {
-      if (standalone) return offlineCoachResponse(req);
-      const r = await fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
-      if (!r.ok) throw new Error(String(r.status));
-      return (await r.json()) as CoachResponse;
-    },
-    play: audio.play,
-    stop: audio.stop,
-    onCaption: (cue: VoiceCue, info: CueInfo) => {
-      caption = { text: cue.text, source: info.source, evidence: info.evidence, at: performance.now() };
-      log.unshift(`${(cue.atMs / 1000).toFixed(1)}s  COACH [${info.source}] ${cue.text}`);
-    },
-    onStatus: (st) => { coachStatus = st; },
-    onEffect: (r, cue) => {
-      effects.push({ r, text: cue.text });
-      log.unshift(`${(r.evaluatedAtMs / 1000).toFixed(1)}s  EFFECT ${r.outcome}: ${r.notes}`);
-    },
-  });
 }
 
 function send(i: Input) {
@@ -190,9 +145,8 @@ function send(i: Input) {
 
 attachKeyboard(send);
 window.addEventListener("keydown", (e) => {
-  if (!started) { // first key = user gesture, unlocks audio
+  if (!started) {
     started = true;
-    audio.preload(Object.values(RULE_LINES).map((text) => ({ text })));
     newFight();
     return;
   }
@@ -242,38 +196,6 @@ function fighter(f: Fighter, cx: number, label: string, facing: 1 | -1) {
   g.fillText(`${label}  ${f.phase}${held}${f.punch ? " " + f.punch : ""}${f.weak ? " (low on tokens)" : ""}`, cx, y + 70);
 }
 
-function wrap(text: string, maxW: number): string[] {
-  const words = text.split(" "), lines: string[] = [];
-  let cur = "";
-  for (const w of words) {
-    const next = cur ? `${cur} ${w}` : w;
-    if (g.measureText(next).width > maxW && cur) { lines.push(cur); cur = w; } else cur = next;
-  }
-  if (cur) lines.push(cur);
-  return lines;
-}
-
-function drawCaption() {
-  if (!caption) return;
-  const age = performance.now() - caption.at;
-  if (age > 7000 && s.status === "fighting") return;
-  g.globalAlpha = age > 6000 && s.status === "fighting" ? Math.max(0, 1 - (age - 6000) / 1000) : 1;
-  const x = 40, y = 370, w = cv.width - 80;
-  g.font = "bold 16px ui-sans-serif, system-ui, sans-serif";
-  const lines = wrap(caption.text, w - 40);
-  const h = 44 + lines.length * 22;
-  g.fillStyle = css("--panel"); g.strokeStyle = css("--accent"); g.lineWidth = 2;
-  g.beginPath(); g.roundRect(x, y, w, h, 10); g.fill(); g.stroke();
-  g.fillStyle = css("--accent"); g.font = "bold 11px ui-monospace, monospace"; g.textAlign = "left";
-  const badge = caption.source === "claude" ? "CLAUDE COACH" : caption.source === "offline" ? "COACH (offline)" : "COACH";
-  g.fillText(badge, x + 20, y + 22);
-  g.fillStyle = css("--muted"); g.font = "11px ui-monospace, monospace";
-  if (caption.evidence.length) g.fillText(caption.evidence.join(" · ").slice(0, 80), x + 130, y + 22);
-  g.fillStyle = css("--ink"); g.font = "bold 16px ui-sans-serif, system-ui, sans-serif";
-  lines.forEach((l, i) => g.fillText(l, x + 20, y + 46 + i * 22));
-  g.globalAlpha = 1;
-}
-
 function frame() {
   g.clearRect(0, 0, cv.width, cv.height);
   if (!started) {
@@ -290,9 +212,6 @@ function frame() {
   }
   advance(s, now());
   const ev = drainEvents(s);
-  coach.update(engineRow(s));
-  coach.ingest(ev);
-  coach.tick();
   for (const e of ev) {
     if (e.type === "punch") log.unshift(`${(e.t / 1000).toFixed(1)}s  ${e.attacker} ${e.punch} -> ${e.outcome} (${e.damage})`);
     else if (e.type === "ko" || e.type === "time_up") log.unshift(`${(e.t / 1000).toFixed(1)}s  ${e.type.toUpperCase()} winner: ${e.winner}`);
@@ -312,27 +231,12 @@ function frame() {
   if (over) { g.font = "bold 16px ui-monospace, monospace"; g.fillText(status, cv.width / 2, 86); }
   else g.fillText(status, cv.width / 2, 34);
   g.font = "12px ui-monospace, monospace"; g.fillStyle = css("--muted");
-  const chip = { watching: "coach watching", thinking: "coach thinking...", offline: "coach offline (local tips)", paused: "coach paused", done: "coach: fight over" }[coachStatus];
-  g.fillText(`${chip}  ·  voice: ${audio.engine === "cartesia" ? "Cartesia" : audio.engine === "browser" ? "built-in" : "…"}`, cv.width / 2, 56);
-
   fighter(s.player, cv.width / 2 - 110, "YOU", 1);
   fighter(s.cpu, cv.width / 2 + 110, "CPU", -1);
-  drawCaption();
 
   g.textAlign = "left"; g.font = "12px ui-monospace, monospace"; g.fillStyle = css("--ink");
-  const over2 = (s.status === "ko" || s.status === "decision") && effects.length;
-  log.forEach((l, i) => { g.globalAlpha = 1 - i * 0.11; g.fillText(l.slice(0, over2 ? 58 : 110), 20, 500 + i * 16); });
+  log.forEach((l, i) => { g.globalAlpha = 1 - i * 0.11; g.fillText(l.slice(0, 110), 20, 500 + i * 16); });
   g.globalAlpha = 1;
-
-  if ((s.status === "ko" || s.status === "decision") && effects.length) {
-    g.font = "bold 12px ui-monospace, monospace"; g.textAlign = "right";
-    g.fillText("Did the coaching help?", cv.width - 20, 500);
-    g.font = "12px ui-monospace, monospace";
-    effects.slice(-5).forEach((e, i) => {
-      const note = (e.r.notes ?? "").replace(" (too little time after the tip to judge)", " (too soon)");
-      g.fillText(`${e.r.outcome}: ${note}`.slice(0, 52), cv.width - 20, 516 + i * 16);
-    });
-  }
   if (webcamEnabled) {
     g.fillStyle = css("--accent"); g.font = "bold 10px ui-monospace, monospace"; g.textAlign = "right";
     g.globalAlpha = 0.7;

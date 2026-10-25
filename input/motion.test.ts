@@ -38,7 +38,7 @@ test("hook: left wrist sweeps inward across the body", () => {
   expect(swing(ready(), "lw", [0.75, 0.42], [0.5, 0.4], 0)).toEqual(["hook_l"]);
 });
 
-test("straight: left wrist pushes outward/forward = jab", () => {
+test("straight: left wrist pushes outward/forward = left straight (jab)", () => {
   expect(swing(ready(), "lw", [0.56, 0.35], [0.66, 0.33], 0)).toEqual(["jab"]);
 });
 
