@@ -89,7 +89,7 @@ export class CornerScene {
   // ── Public API ─────────────────────────────────────────────────────────
 
   /** Trigger the corner scene after a fight ends. Fetches analysis and shows bubble. */
-  enter(conn: DbConnection | undefined, matchId: bigint, won: boolean, reason: string, adaptationCount: number) {
+  enter(conn: DbConnection | undefined, matchId: bigint, won: boolean, reason: string, adaptationCount: number, playerName?: string) {
     this.active = true;
     this.claudeGroup.visible = true;
 
@@ -104,7 +104,7 @@ export class CornerScene {
     this.camStartQuat.copy(this.camera.quaternion);
 
     // Fetch analysis; delivered after camera settles
-    void this.fetchAnalysis(conn, matchId, won, reason, adaptationCount);
+    void this.fetchAnalysis(conn, matchId, won, reason, adaptationCount, playerName);
   }
 
   /** Hide everything and return camera control to the main loop. */
@@ -176,7 +176,7 @@ export class CornerScene {
   private async loadCrab(): Promise<void> {
     const loader = new GLTFLoader();
     try {
-      const gltf = await loader.loadAsync("/claude_crab.glb");
+      const gltf = await loader.loadAsync("/claude_bot.glb");
       const crab = gltf.scene;
 
       // Face toward new camera position (inside ring)
@@ -208,7 +208,7 @@ export class CornerScene {
 
   /** Show the analysis speech bubble (fixed bottom-center position) with typewriter text. */
   showAnalysisBubble(text: string, source: "claude" | "offline"): void {
-    const headerLabel = source === "claude" ? "CLAUDE ANALYSIS" : "CORNER NOTES";
+    const headerLabel = source === "claude" ? "CLAUDE BOT" : "CORNER NOTES";
 
     this.bubbleEl.innerHTML = `
       <div class="wii-bubble-header">
@@ -354,11 +354,13 @@ export class CornerScene {
     matchId: bigint,
     won: boolean,
     reason: string,
-    adaptationCount: number
+    adaptationCount: number,
+    playerName?: string
   ) {
     const windows = this.collectWindows(conn, matchId);
     const req: AnalysisRequest = {
       matchId: String(matchId),
+      playerName,
       result: { won, reason },
       windows,
       adaptationCount,

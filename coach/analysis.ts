@@ -18,6 +18,7 @@ export interface FightWindowSummary {
 
 export interface AnalysisRequest {
   matchId: string;
+  playerName?: string;
   result: { won: boolean; reason: string };
   windows: FightWindowSummary[];
   adaptationCount: number;
@@ -41,12 +42,20 @@ export const DEFAULT_ANALYSIS_MODEL = "claude-haiku-4-5-20251001";
 
 const MAX_BODY_BYTES = 32_000;
 
-const SYSTEM_PROMPT = `You are Claude Tyson's corner coach. Two sentences MAX. No paragraphs. Talk exactly like a boxing trainer yelling across the corner stool — blunt, vivid, specific.
+const SYSTEM_PROMPT = `You are Claude Bot, an enthusiastic boxing coach and gym trainer who genuinely wants to see this fighter grow. Give a post-match analysis in 3 to 4 sentences covering what went well, what recurring pattern held them back, and one concrete thing to work on.
 
-First sentence: one sharp observation about what they did (cite the actual numbers if useful — accuracy, punch mix, caught hits).
-Second sentence: one concrete thing to fix next time. Make it stick.
+Style: warm, direct, encouraging but honest. Think Wii Fit trainer energy crossed with a real boxing corner coach. Address the fighter by name if provided.
 
-Under 45 words total. If they won, still find the flaw. If they lost, find the silver lining. Never generic.`;
+Rules:
+- Exactly 3 to 4 sentences. No more.
+- No dashes, em dashes, colons, semicolons, or asterisks anywhere in the output.
+- No stats, numbers, or percentages. Describe patterns and tendencies in plain language.
+- Punches and hooks are general moves. Do not mention targeting specific areas.
+- Base everything on patterns across the whole fight, not single moments.
+- If they won, still identify the main habit to sharpen. If they lost, lead with what showed genuine promise.
+- Give practical actionable boxing advice the way a real gym trainer would.
+- No mention of future sessions, next time, or anything outside this fight.
+- No markdown, no bold, no bullet points. Plain sentences only.`;
 
 function offlineAnalysis(req: AnalysisRequest): AnalysisResponse {
   const total = req.windows.reduce((s, w) => s + w.playerAttempts, 0);
@@ -85,16 +94,19 @@ function buildUserPrompt(req: AnalysisRequest): string {
   const lastHealth = req.windows.at(-1)?.playerHealth ?? 100;
   const skill = total < 10 || acc < 20 ? 'beginner' : acc > 40 && req.windows.length >= 4 ? 'advanced' : 'intermediate';
 
-  return `Outcome: ${req.result.won ? 'player WON' : 'Claude Tyson WON'} by ${req.result.reason}.
+  const name = req.playerName ?? 'the fighter';
+  const outcome = req.result.won ? `${name} WON` : `${name} LOST`;
+  return `Player name: ${name}
+Outcome: ${outcome} by ${req.result.reason}.
 Skill level (inferred): ${skill}
 Total punches thrown: ${total} | landed: ${landed} (${acc}%)
 Punch mix: jabs ${jabs}, straights ${straights}, hooks ${hooks}, uppercuts ${uppers}
 Defense: ${slips} slips, ${blocks} blocks, took ${caught} hits
 Player health remaining: ${lastHealth}/100
-Claude adapted ${req.adaptationCount} times during the fight.
+Bot adapted ${req.adaptationCount} times during the fight.
 Fight windows (each ~6s): ${req.windows.length}
 
-Give them your corner speech now.`;
+Give them your post-match analysis now. Address them by name. No dashes, colons, semicolons, em dashes, or asterisks.`;
 }
 
 export async function analyzeWithClaude(req: AnalysisRequest, o: AnalysisOptions = {}): Promise<AnalysisResponse> {
@@ -116,7 +128,7 @@ export async function analyzeWithClaude(req: AnalysisRequest, o: AnalysisOptions
       },
       body: JSON.stringify({
         model: o.model ?? DEFAULT_ANALYSIS_MODEL,
-        max_tokens: 120,
+        max_tokens: 250,
         system: SYSTEM_PROMPT,
         messages: [{
           role: "user",

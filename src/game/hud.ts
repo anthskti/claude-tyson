@@ -291,7 +291,7 @@ export class Hud {
   showCornerAnalysis(text: string, source: 'claude' | 'offline', onDismiss?: () => void) {
     const d = el('debrief');
     const tag = source === 'claude'
-      ? `<span class="debrief-source">CLAUDE ANALYSIS</span>`
+      ? `<span class="debrief-source">CLAUDE BOT</span>`
       : `<span class="debrief-source offline">CORNER NOTES</span>`;
     d.innerHTML = `
       <div class="debrief-box">

@@ -267,7 +267,7 @@ function refresh() {
         cinematicMode = true;
         hudState.cinematic = true;
         wheel.hide();
-        cornerScene.enter(server.conn, snap.match.id, won, reason, wheel.totalClanks);
+        cornerScene.enter(server.conn, snap.match.id, won, reason, wheel.totalClanks, hudState.playerName);
       }, 2400);
     }
   }
