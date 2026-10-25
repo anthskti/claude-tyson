@@ -6,6 +6,8 @@ or an adaptive Claude sparring bot. A keyboard mode plays the same game without 
 
 **Play:** https://claude-tyson.vercel.app
 
+**AirPod controllers:** [hosted companion setup and current integration status](docs/HOSTED_MOTION.md). The game stays hosted; optional native sensors and inference run locally.
+
 Next.js and Three.js render the game in the browser. SpacetimeDB runs every match:
 it decides which actions count, how much damage lands, stamina, KOs and results, and it
 keeps player profiles. Computer vision runs entirely on the player's machine; only
@@ -52,9 +54,7 @@ browser (Chrome, Edge or Firefox), stand back so your head and both hands are in
 and allow camera access. The camera chip in the top bar shows tracking status and frame
 rate (hover for timings); below 20 FPS the HUD warns that punches may not register.
 
-The original Python pipeline (`cv-mvp/`, on the `cv-mvp` branch) is still available as a
-local bridge for tuning and replays: run `python -m cv_mvp --camera 0` there and open the
-game with `?cvSource=bridge`.
+The deprecated `cv-mvp` Python package is replaced by `motion/`. Camera-only play keeps the browser workers. AirPods + camera uses the downloaded Mac companion for IMU punches and pose-only dodges.
 
 ## Architecture
 
@@ -62,12 +62,12 @@ game with `?cvSource=bridge`.
 |---|---|
 | `src/app/` | Next.js page |
 | `src/game/` | Three.js scene, HUD, SpacetimeDB client (`net/`) |
-| `src/game/cv/` | Camera input: `input.ts` (actions to controls), `browserCv.ts` (in-browser source), `bridge.ts` (Python bridge source), `guard.ts` (block calibration), `cameraFeed.ts` (preview) |
+| `src/game/cv/` | Camera input: `input.ts` (actions to controls), `browserCv.ts` (in-browser source), `airpods.ts` (authenticated companion source), `guard.ts` (block calibration), `cameraFeed.ts` (preview) |
 | `src/game/cv/local/` | In-browser CV: MediaPipe workers and the detector port, with parity fixtures from cv-mvp |
 | `spacetimedb/src/` | Schema, reducers, authoritative combat, bot, profiles |
 | `engine/`, `input/` | Pure combat/input utilities used by the standalone arena |
 | `dev/` | Standalone local arena (not the online game) |
-| `cv-mvp/models/` | MediaPipe models, copied into `public/cv/` at build time |
+| `assets/mediapipe/` | MediaPipe models, copied into `public/cv/` at build time |
 | `AGENTS.md` | Project scope, architecture boundaries, and engineering guidance |
 | `CONTRACTS.md` | Shared design contract for actions and combat shapes |
 | `schema-diagram.md` | Conceptual SpacetimeDB data model and client/server pipeline |
@@ -115,7 +115,7 @@ The client defaults to `ws://localhost:3000` and database `claude-tyson`; set
 `.env.example`). `bun run dev` and `bun run build` first run `scripts/cv-assets.ts`, which
 copies the MediaPipe WASM and hash-checked models into `public/cv/` (generated, gitignored).
 
-Debug URL parameters: `?input=camera|keyboard`, `?cvSource=bridge`,
+Debug URL parameters: `?input=camera|keyboard|airpods`,
 `?cvVideo=/clip.mp4` (play a same-origin clip as the camera), `?cvDelegate=GPU|CPU|mixed`.
 
 ## Tests

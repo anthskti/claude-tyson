@@ -1,0 +1,9 @@
+# Python 3.11 / macOS arm64. Existing tested inference versions, no training stack.
+numpy==1.26.4
+torch==2.5.1
+mediapipe==0.10.21
+opencv-contrib-python==4.11.0.86
+jax==0.4.35
+jaxlib==0.4.35
+protobuf==4.25.3
+websockets==15.0.1

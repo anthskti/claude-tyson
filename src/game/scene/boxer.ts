@@ -211,6 +211,12 @@ export class PlayerGloves {
     this.target[hand].set((screenX - 0.5) * 1.6, -0.2 + (0.5 - marker.y) * 0.5, -0.45);
   }
 
+  /** AirPod punches have no wrist coordinates. Draw a fixed guard pose, independent of CV. */
+  setControllerHand(hand: Hand, available: boolean) {
+    this.visible[hand] = available;
+    this.target[hand].set(hand === 'left' ? -0.22 : 0.22, -0.2, -0.45);
+  }
+
   setGuard(hand: Hand, guard: Guard) {
     this.guard[hand] = guard;
   }
