@@ -92,16 +92,17 @@ telegraphMs (350–1200): ms before impact the visual cue appears. Lower = harde
 • leftBias tip: attack the side where player's guard is weaker (default 0.5 balanced)
 
 === HISTORY RULE ===
-• If previous strategy "worsened": change a DIFFERENT knob, or reverse direction.
-• If "inconclusive" twice in a row: make a larger change (±0.2 aggression, ±250ms interval).
-• If "improved": you may skip or make only a small tightening move.
+• If previous strategy "worsened": change a DIFFERENT knob, or reverse direction — do NOT repeat the same move.
+• If "inconclusive" two or more times in a row: make a bold change (±0.25 aggression, ±300ms interval, ±0.3 weight).
+• If "improved": the current strategy is working — skip OR make only a tiny tightening move (±0.05).
+• Never return the exact same knob values as current strategy (that's a skip — use skip=true instead).
 
-=== SKIP RULES (set skip=true) ===
-• playerAttempts < 5
-• trackingCoverage < 0.5
-• All proposed knob changes would be < 0.05 / 50ms from current values
+=== SKIP RULES (set skip=true, still fill all other fields with CURRENT values) ===
+• playerAttempts < 5 (not enough data)
+• trackingCoverage < 0.5 (unreliable data)
+• Strategy is currently "improved" and you have no strong counter-signal
 
-Keep explanation ≤ ${MAX_EXPLANATION_CHARS} chars. Quote the exact stat (e.g., "hooks 63%, raising straight weights").`;
+Keep explanation ≤ ${MAX_EXPLANATION_CHARS} chars. Always cite the key stat (e.g., "hooks 63%, raising straight weights to counter").`;
 
 function tool() {
   return {
@@ -140,13 +141,40 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
+function buildUserMessage(req: StrategistRequest): string {
+  const { window: w, strategy: s, history } = req;
+  const acc = w.playerAttempts > 0 ? Math.round((w.playerLanded / w.playerAttempts) * 100) : 0;
+  const hookPct = w.playerAttempts > 0 ? Math.round((w.playerHooks / w.playerAttempts) * 100) : 0;
+  const stPct   = w.playerAttempts > 0 ? Math.round((w.playerStraights / w.playerAttempts) * 100) : 0;
+
+  const histLines = history.length > 0
+    ? history.map(h => `  [${h.outcome}] ${h.explanation}`).join('\n')
+    : '  (none yet)';
+
+  return `=== WINDOW #${req.windowId} ===
+Player: ${w.playerLanded}/${w.playerAttempts} landed (${acc}%) | hooks ${hookPct}% | straights ${stPct}%
+Defense: ${w.playerSlips} slips, ${w.playerBlocks} blocks, took ${w.playerCaught} hits
+Health: bot ${w.botHealth}/100, player ${w.playerHealth}/100 | tracking ${Math.round(w.trackingCoverage * 100)}%
+Bot attacks this window: ${w.botAttacks}
+
+Current strategy (rev ${req.strategyRevision}):
+  aggression=${s.aggression.toFixed(2)}, interval=${s.punchIntervalMs}ms, telegraph=${s.telegraphMs}ms
+  hooks=${s.hookWeight.toFixed(2)}, straights=${s.straightWeight.toFixed(2)}, jabs=${s.jabWeight.toFixed(2)}, leftBias=${s.leftBias.toFixed(2)}, defense=${s.defenseRate.toFixed(2)}
+  last reason: "${s.explanation}"
+
+Adaptation history (oldest→newest):
+${histLines}
+
+Call update_strategy now.`;
+}
+
 export async function coachWithStrategist(req: StrategistRequest, o: StrategistOptions = {}): Promise<StrategistResponse> {
   const log = o.log ?? (() => {});
   if (!o.apiKey) return offlineResponse(req);
 
   const f = o.fetchImpl ?? fetch;
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), o.timeoutMs ?? 4000);
+  const timer = setTimeout(() => ctl.abort(), o.timeoutMs ?? 7000);
 
   try {
     const res = await f(`${o.baseUrl ?? "https://api.anthropic.com"}/v1/messages`, {
@@ -163,7 +191,7 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
         system: SYSTEM_PROMPT,
         tools: [tool()],
         tool_choice: { type: "tool", name: "update_strategy" },
-        messages: [{ role: "user", content: `Fight window:\n${JSON.stringify(req)}` }],
+        messages: [{ role: "user", content: buildUserMessage(req) }],
       }),
     });
 

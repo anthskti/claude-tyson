@@ -134,6 +134,12 @@ export class AdaptationManager {
     // Only count the punch types the game actually uses (hooks + straights).
     const playerAttempts = window.playerStraights + window.playerHooks;
 
+    // Skip if player barely threw any punches — Claude would skip anyway.
+    if (playerAttempts < 3) {
+      log(`W#${window.id} skip — playerAttempts ${playerAttempts}`);
+      return;
+    }
+
     const req: StrategistRequest = {
       windowId: String(window.id),
       matchId: String(window.matchId),
@@ -165,7 +171,7 @@ export class AdaptationManager {
         telegraphMs: strategy.telegraphMs,
         explanation: strategy.explanation,
       },
-      history: this.history.slice(-2),
+      history: this.history.slice(-3),
     };
 
     this.state = "requesting";
@@ -220,15 +226,15 @@ export class AdaptationManager {
     const prevRate = prev.prePlayerAttempts > 0 ? prev.prePlayerLanded / prev.prePlayerAttempts : 0;
     const healthDelta = nextWindow.botHealth - prev.preBotHealth;
 
-    // Bot holding better (more health) → improved.
-    if (healthDelta > 5) return "improved";
-    // Bot taking significant damage → worsened.
+    // Bot barely lost health this window → strategy is working (player can't get through).
+    if (healthDelta >= -4) return "improved";
+    // Bot took significant damage → strategy worsened (player breaking through).
     if (healthDelta < -10) return "worsened";
 
     // Accuracy delta only reliable with enough samples.
     if (hasEnoughData) {
-      if (nextRate < prevRate - 0.07) return "improved";
-      if (nextRate > prevRate + 0.07) return "worsened";
+      if (nextRate < prevRate - 0.05) return "improved";
+      if (nextRate > prevRate + 0.05) return "worsened";
     }
     return "inconclusive";
   }

@@ -1195,12 +1195,12 @@ code {
 
 /* Character avatar — fills most of the frame like real SF6 art */
 .vs-avatar {
-  width: clamp(180px, 28vw, 280px);
-  height: clamp(180px, 28vw, 280px);
+  width: clamp(100px, min(24vw, 28vh), 220px);
+  height: clamp(100px, min(24vw, 28vh), 220px);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-family: 'Lilita One', cursive;
-  font-size: clamp(2.8rem, 7vw, 5rem);
+  font-size: clamp(1.8rem, min(5vw, 7vh), 3.5rem);
   color: #fff;
   letter-spacing: 0.02em;
   position: relative; z-index: 2;
@@ -1233,7 +1233,7 @@ code {
 /* ── Bottom nameplate — solid SF6-style bar ────────────────────────── */
 .vs-nameplate {
   width: 100%;
-  padding: 14px 20px 20px;
+  padding: clamp(8px, 1.5vh, 14px) 20px clamp(10px, 2.5vh, 20px);
   position: relative; z-index: 3;
   text-align: center;
 }
@@ -1249,7 +1249,7 @@ code {
 }
 .vs-name {
   font-family: 'Lilita One', cursive;
-  font-size: clamp(1.2rem, 3.5vw, 2.2rem);
+  font-size: clamp(1rem, min(3vw, 3.5vh), 1.8rem);
   color: #fff;
   letter-spacing: 0.06em; text-transform: uppercase;
   text-shadow: 0 2px 12px rgba(0,0,0,0.9), 0 0 30px rgba(255,255,255,0.1);
@@ -1276,7 +1276,7 @@ code {
 }
 .vs-text {
   font-family: 'Lilita One', cursive;
-  font-size: clamp(5rem, 14vw, 10rem);
+  font-size: clamp(3.5rem, min(11vw, 18vh), 7.5rem);
   line-height: 1;
   color: #ffc820;
   letter-spacing: -0.04em;

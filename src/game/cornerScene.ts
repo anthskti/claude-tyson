@@ -53,6 +53,7 @@ export class CornerScene {
   // Crab model state
   private crabLoaded = false;
   private crabMesh: THREE.Object3D | null = null;
+  private crabBaseY = 0; // world-Y of the model base after auto-fit
 
   // Analysis bubble DOM element
   private bubbleEl: HTMLDivElement;
@@ -146,9 +147,9 @@ export class CornerScene {
     this.pulseT += dt;
 
     if (this.crabLoaded && this.crabMesh) {
-      // Bob the crab up and down
+      // Bob gently around the fitted base position
       this.bobT += dt;
-      this.crabMesh.position.y = Math.sin(this.bobT * 1.5) * 0.06;
+      this.crabMesh.position.y = this.crabBaseY + Math.sin(this.bobT * 1.5) * 0.06;
     } else {
       // Placeholder fallback: slow coin-spin of the whole group
       this.claudeGroup.rotation.y += dt * 0.55;
@@ -177,19 +178,36 @@ export class CornerScene {
     const loader = new GLTFLoader();
     try {
       const gltf = await loader.loadAsync("/claude_bot.glb");
-      const crab = gltf.scene;
+      const model = gltf.scene;
 
-      // Face toward new camera position (inside ring)
-      crab.rotation.y = -Math.PI * 0.875;
+      // ── Auto-fit: scale so the model is ~1.8 units (metres) tall ──────────
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const targetHeight = 1.8;
+      const fitScale = size.y > 0.001 ? targetHeight / size.y : 1;
+      model.scale.setScalar(fitScale);
 
-      // Scale 1.5x
-      crab.scale.setScalar(1.5);
+      // Re-measure after scaling to get accurate bounds
+      box.setFromObject(model);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
 
-      // Position at base of claudeGroup
-      crab.position.set(0, 0, 0);
+      // Centre the model horizontally on the group origin and sit it on y=0
+      model.position.x = -center.x;
+      model.position.z = -center.z;
+      model.position.y = -box.min.y;
+      this.crabBaseY = model.position.y;
 
-      this.claudeGroup.add(crab);
-      this.crabMesh = crab;
+      // Face toward camera — group is at CLAUDE_PLACEHOLDER_POS, camera at CORNER_CAM_POS.
+      // GLB exported from Blender has +Z forward, so rotation.y = atan2(dx, dz) where
+      // (dx, dz) is the direction from the group to the camera in the XZ plane.
+      const dx = CORNER_CAM_POS.x - CLAUDE_PLACEHOLDER_POS.x; //  0.2
+      const dz = CORNER_CAM_POS.z - CLAUDE_PLACEHOLDER_POS.z; // -2.8
+      model.rotation.y = Math.atan2(dx, dz);
+
+      this.claudeGroup.add(model);
+      this.crabMesh = model;
       this.crabLoaded = true;
 
       // Hide the placeholder logo plane and glow disc
@@ -197,8 +215,11 @@ export class CornerScene {
       if (logoPlane) logoPlane.visible = false;
       const glowDisc = this.claudeGroup.getObjectByName("claudeGlowDisc");
       if (glowDisc) glowDisc.visible = false;
-    } catch {
-      // GLB not available — keep existing placeholder behavior
+
+      console.log(`[CornerScene] claude_bot.glb loaded — raw size: ${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)}, fitScale: ${fitScale.toFixed(3)}`);
+    } catch (err) {
+      // GLB not available — keep existing placeholder behaviour
+      console.warn("[CornerScene] claude_bot.glb failed to load:", err);
       this.crabLoaded = false;
       this.crabMesh = null;
     }

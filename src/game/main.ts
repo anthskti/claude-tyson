@@ -1,4 +1,3 @@
-import './style.css';
 import * as THREE from 'three';
 import { buildArena, loadRing } from './scene/ring';
 import { Boxer, PlayerGloves, cornerOf, type AnyPunch } from './scene/boxer';
