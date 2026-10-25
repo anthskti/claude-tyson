@@ -102,8 +102,8 @@ export class SimulatedCvProvider implements CvProvider {
   private onBlur = () => this.held.clear();
 
   private recalibrate() {
-    this.calibrationId = null;
-    this.calibratingUntil = performance.now() + CALIBRATION_MS;
+    this.calibrationId = `cal-${Math.random().toString(36).slice(2, 8)}`;
+    this.calibratingUntil = 0;
     this.lateral = 0;
     this.dodgeSide = null;
   }

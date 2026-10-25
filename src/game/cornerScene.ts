@@ -53,6 +53,7 @@ export class CornerScene {
   // Crab model state
   private crabLoaded = false;
   private crabMesh: THREE.Object3D | null = null;
+  private crabBaseY = 0; // world-Y of the model base after auto-fit
 
   // Analysis bubble DOM element
   private bubbleEl: HTMLDivElement;
@@ -89,7 +90,7 @@ export class CornerScene {
   // ── Public API ─────────────────────────────────────────────────────────
 
   /** Trigger the corner scene after a fight ends. Fetches analysis and shows bubble. */
-  enter(conn: DbConnection | undefined, matchId: bigint, won: boolean, reason: string, adaptationCount: number) {
+  enter(conn: DbConnection | undefined, matchId: bigint, won: boolean, reason: string, adaptationCount: number, playerName?: string) {
     this.active = true;
     this.claudeGroup.visible = true;
 
@@ -104,7 +105,7 @@ export class CornerScene {
     this.camStartQuat.copy(this.camera.quaternion);
 
     // Fetch analysis; delivered after camera settles
-    void this.fetchAnalysis(conn, matchId, won, reason, adaptationCount);
+    void this.fetchAnalysis(conn, matchId, won, reason, adaptationCount, playerName);
   }
 
   /** Hide everything and return camera control to the main loop. */
@@ -146,9 +147,9 @@ export class CornerScene {
     this.pulseT += dt;
 
     if (this.crabLoaded && this.crabMesh) {
-      // Bob the crab up and down
+      // Bob gently around the fitted base position
       this.bobT += dt;
-      this.crabMesh.position.y = Math.sin(this.bobT * 1.5) * 0.06;
+      this.crabMesh.position.y = this.crabBaseY + Math.sin(this.bobT * 1.5) * 0.06;
     } else {
       // Placeholder fallback: slow coin-spin of the whole group
       this.claudeGroup.rotation.y += dt * 0.55;
@@ -168,11 +169,6 @@ export class CornerScene {
       }
     }
 
-    // Keep bubble positioned over crab head while visible
-    if (!this.animating && this.bubbleEl.classList.contains("visible")) {
-      this.updateBubblePosition();
-    }
-
     return true; // we own the camera
   }
 
@@ -181,20 +177,36 @@ export class CornerScene {
   private async loadCrab(): Promise<void> {
     const loader = new GLTFLoader();
     try {
-      const gltf = await loader.loadAsync("/claude_crab.glb");
-      const crab = gltf.scene;
+      const gltf = await loader.loadAsync("/claude_bot.glb");
+      const model = gltf.scene;
 
-      // Face toward new camera position (inside ring)
-      crab.rotation.y = -Math.PI * 0.875;
+      // ── Auto-fit: scale so the model is ~1.8 units (metres) tall ──────────
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const targetHeight = 1.8;
+      const fitScale = size.y > 0.001 ? targetHeight / size.y : 1;
+      model.scale.setScalar(fitScale);
 
-      // Scale 1.5x
-      crab.scale.setScalar(1.5);
+      // Re-measure after scaling to get accurate bounds
+      box.setFromObject(model);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
 
-      // Position at base of claudeGroup
-      crab.position.set(0, 0, 0);
+      // Centre the model horizontally on the group origin and sit it on y=0
+      model.position.x = -center.x;
+      model.position.z = -center.z;
+      model.position.y = -box.min.y;
+      this.crabBaseY = model.position.y;
 
-      this.claudeGroup.add(crab);
-      this.crabMesh = crab;
+      // Face toward camera — Blender exports with -Z forward in Three.js, so
+      // rotation.y = atan2(dx, dz) where (dx,dz) is direction from group to camera.
+      const dx = CORNER_CAM_POS.x - CLAUDE_PLACEHOLDER_POS.x;
+      const dz = CORNER_CAM_POS.z - CLAUDE_PLACEHOLDER_POS.z;
+      model.rotation.y = Math.atan2(dx, dz);
+
+      this.claudeGroup.add(model);
+      this.crabMesh = model;
       this.crabLoaded = true;
 
       // Hide the placeholder logo plane and glow disc
@@ -202,6 +214,8 @@ export class CornerScene {
       if (logoPlane) logoPlane.visible = false;
       const glowDisc = this.claudeGroup.getObjectByName("claudeGlowDisc");
       if (glowDisc) glowDisc.visible = false;
+
+      console.log(`[CornerScene] claude_bot.glb loaded — raw size: ${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)}, fitScale: ${fitScale.toFixed(3)}`);
     } catch {
       // GLB not available — keep existing placeholder behavior
       this.crabLoaded = false;
@@ -232,20 +246,19 @@ export class CornerScene {
     this.bubbleEl.style.top = y + "px";
   }
 
-  /** Show the analysis speech bubble with typewriter text. */
+  /** Show the analysis speech bubble (fixed bottom-center) with typewriter text. */
   showAnalysisBubble(text: string, source: "claude" | "offline"): void {
-    const headerLabel = source === "claude" ? "CLAUDE ANALYSIS" : "CORNER NOTES";
+    const headerLabel = source === "claude" ? "CLAUDE CRAB" : "CORNER NOTES";
 
     this.bubbleEl.innerHTML = `
       <div class="wii-bubble-header">
-        <span class="wii-bubble-icon">C</span>
+        <span class="wii-bubble-icon">CC</span>
         <span class="wii-bubble-source">${escapeHtml(headerLabel)}</span>
       </div>
       <p id="wii-text"></p>
       <button class="wii-bubble-ok">GOT IT</button>
     `;
 
-    this.updateBubblePosition();
     this.bubbleEl.classList.add("visible");
 
     // Wire up the GOT IT button
@@ -381,11 +394,13 @@ export class CornerScene {
     matchId: bigint,
     won: boolean,
     reason: string,
-    adaptationCount: number
+    adaptationCount: number,
+    playerName?: string
   ) {
     const windows = this.collectWindows(conn, matchId);
     const req: AnalysisRequest = {
       matchId: String(matchId),
+      playerName,
       result: { won, reason },
       windows,
       adaptationCount,
@@ -420,8 +435,8 @@ export class CornerScene {
       let fallback: string;
       if (total < 5) {
         fallback = wonResult
-          ? "You got the win but barely threw anything. Next time stay active — jab to find range, then follow up hard."
-          : "You didn't throw enough for me to work with. Get your hands up, stay active, start with the jab.";
+          ? "You got the win but barely threw anything. Stay active — use straights to find range, then follow with the hook."
+          : "You didn't throw enough for me to work with. Get your hands up, stay active, mix straights and hooks.";
       } else {
         const rate = Math.round((landed / total) * 100);
         fallback = wonResult

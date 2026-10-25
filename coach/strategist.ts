@@ -11,7 +11,7 @@ export interface StrategistOptions {
 }
 
 export const DEFAULT_STRATEGIST_MODEL = "claude-haiku-4-5-20251001";
-const MAX_EXPLANATION_CHARS = 120;
+const MAX_EXPLANATION_CHARS = 130;
 const MAX_BODY_BYTES = 32_000;
 
 export interface StrategistRequest {
@@ -66,46 +66,60 @@ export interface StrategistResponse {
   explanation: string;
 }
 
-const SYSTEM_PROMPT = `You are the AI strategist for Claude Tyson, an adaptive CPU boxer in a webcam boxing game.
-Every 6 seconds you receive a fight window showing how the player attacked, and the current bot settings.
-Your job: adjust the bot behavior knobs to make the fight challenging without being unfair.
+const SYSTEM_PROMPT = `You are the adaptive AI strategist for Claude Tyson, a CPU boxer that reacts to the human player's punch patterns in real-time.
 
-Bot behavior knobs:
-- aggression (0–1): how often the bot initiates attacks
-- punchIntervalMs (600–4000): milliseconds between bot punches (lower = faster)
-- jabWeight/straightWeight/hookWeight/uppercutWeight (0–1 each, unnormalized): punch type distribution
-- leftBias (−1 to +1): −1 = all left-hand punches, +1 = all right-hand, 0 = balanced
-- defenseRate (0–0.8): fraction of incoming punches the bot attempts to block or slip
-- telegraphMs (200–1000): how early (ms before impact) the visual cue appears (lower = harder to react)
+Every 6 seconds you receive a fight window. Your job: mutate the bot's behavior knobs to make the fight harder and expose the player's weaknesses. Be decisive — make meaningful changes, not tiny tweaks.
 
-Counter-triangle (exploit the player's patterns):
-- Player hooking a lot → shift leftBias to attack the opposite side (punish their hook opening)
-- Player throwing many straights → raise defenseRate (make them slip more)
-- Player uppercutting → raise hookWeight (counter the uppercut stance)
-- Player landing high %  → lower telegraphMs or raise aggression to pressure them
-- Player blocked often  → raise aggression, lower defenseRate
+=== BOT PUNCH SYSTEM (hooks + straights only, no jabs or uppercuts) ===
+jabWeight    (0–1): probability weight for LEFT-HAND straights
+straightWeight (0–1): probability weight for RIGHT-HAND straights (power punches)
+hookWeight   (0–1): probability weight for HOOKS on BOTH hands (wide arc, punishes extended arms)
+leftBias (0–1): hand selection — 0=always right-hand, 0.5=balanced, 1=always left-hand
 
-History: if a previous strategy "worsened" or "inconclusive", try a different angle; don't repeat the same change.
-If the window has < 5 player attempts or trackingCoverage < 0.5, set skip=true.
-Keep explanation ≤ ${MAX_EXPLANATION_CHARS} characters. Cite the specific stat that drove the change.`;
+=== OTHER KNOBS ===
+aggression (0–1): how often bot initiates attacks. 0.8+ = relentless pressure.
+punchIntervalMs (600–4000): ms between bot punches. 600=very fast, 1600=default.
+defenseRate (0–0.8): fraction of incoming punches bot slips or blocks.
+telegraphMs (350–1200): ms before impact the visual cue appears. Lower = harder to react.
+
+=== COUNTER-TRIANGLE: how to exploit punch patterns ===
+• Player throwing >55% straights → raise hookWeight (hooks beat straight-arm extension)
+• Player throwing >55% hooks     → raise jabWeight + straightWeight, lower hookWeight (straights beat hook openings)
+• Player landing rate > 55%      → lower telegraphMs by 100–150ms AND raise defenseRate by 0.1
+• Player landing rate > 55% and playerCaught > 3 → raise aggression (punish recovery gaps)
+• Player landing rate < 25%      → raise aggression 0.15, keep defenseRate low (dominant bot presses advantage)
+• Player attempts low but landing high → raise telegraphMs (give them readable cues, keep fight fair)
+• leftBias tip: attack the side where player's guard is weaker (default 0.5 balanced)
+
+=== HISTORY RULE ===
+• If previous strategy "worsened": change a DIFFERENT knob, or reverse direction — do NOT repeat the same move.
+• If "inconclusive" two or more times in a row: make a bold change (±0.25 aggression, ±300ms interval, ±0.3 weight).
+• If "improved": the current strategy is working — skip OR make only a tiny tightening move (±0.05).
+• Never return the exact same knob values as current strategy (that's a skip — use skip=true instead).
+
+=== SKIP RULES (set skip=true, still fill all other fields with CURRENT values) ===
+• playerAttempts < 5 (not enough data)
+• trackingCoverage < 0.5 (unreliable data)
+• Strategy is currently "improved" and you have no strong counter-signal
+
+Keep explanation ≤ ${MAX_EXPLANATION_CHARS} chars. Always cite the key stat (e.g., "hooks 63%, raising straight weights to counter").`;
 
 function tool() {
   return {
     name: "update_strategy",
-    description: "Update the bot strategy, or skip if already working or data is insufficient.",
+    description: "Update the bot strategy knobs, or skip if data is insufficient or strategy is already working.",
     input_schema: {
       type: "object",
       properties: {
-        skip: { type: "boolean", description: "true if strategy needs no change or data is insufficient" },
-        aggression: { type: "number", minimum: 0, maximum: 1 },
-        punchIntervalMs: { type: "number", minimum: 600, maximum: 4000 },
-        jabWeight: { type: "number", minimum: 0, maximum: 1 },
-        straightWeight: { type: "number", minimum: 0, maximum: 1 },
-        hookWeight: { type: "number", minimum: 0, maximum: 1 },
-        uppercutWeight: { type: "number", minimum: 0, maximum: 1 },
-        leftBias: { type: "number", minimum: -1, maximum: 1 },
-        defenseRate: { type: "number", minimum: 0, maximum: 0.8 },
-        telegraphMs: { type: "number", minimum: 200, maximum: 1000 },
+        skip: { type: "boolean", description: "true if no change needed or data insufficient" },
+        aggression: { type: "number", minimum: 0, maximum: 1, description: "attack initiation frequency" },
+        punchIntervalMs: { type: "number", minimum: 600, maximum: 4000, description: "ms between bot punches" },
+        jabWeight: { type: "number", minimum: 0, maximum: 1, description: "left-hand straight probability weight" },
+        straightWeight: { type: "number", minimum: 0, maximum: 1, description: "right-hand straight probability weight" },
+        hookWeight: { type: "number", minimum: 0, maximum: 1, description: "hook probability weight for both hands" },
+        leftBias: { type: "number", minimum: 0, maximum: 1, description: "hand bias: 0=always right, 0.5=balanced, 1=always left" },
+        defenseRate: { type: "number", minimum: 0, maximum: 0.8, description: "fraction of incoming punches bot slips/blocks" },
+        telegraphMs: { type: "number", minimum: 350, maximum: 1200, description: "ms before impact visual cue appears" },
         explanation: {
           type: "string",
           description: `≤${MAX_EXPLANATION_CHARS} chars: what changed and why (cite a stat)`,
@@ -113,18 +127,45 @@ function tool() {
       },
       required: [
         "skip", "aggression", "punchIntervalMs", "jabWeight", "straightWeight",
-        "hookWeight", "uppercutWeight", "leftBias", "defenseRate", "telegraphMs", "explanation",
+        "hookWeight", "leftBias", "defenseRate", "telegraphMs", "explanation",
       ],
     },
   };
 }
 
 function offlineResponse(req: StrategistRequest): StrategistResponse {
-  return { skip: true, ...req.strategy, explanation: "offline fallback" };
+  return { skip: true, ...req.strategy, uppercutWeight: 0, explanation: "offline fallback" };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function buildUserMessage(req: StrategistRequest): string {
+  const { window: w, strategy: s, history } = req;
+  const acc = w.playerAttempts > 0 ? Math.round((w.playerLanded / w.playerAttempts) * 100) : 0;
+  const hookPct = w.playerAttempts > 0 ? Math.round((w.playerHooks / w.playerAttempts) * 100) : 0;
+  const stPct   = w.playerAttempts > 0 ? Math.round((w.playerStraights / w.playerAttempts) * 100) : 0;
+
+  const histLines = history.length > 0
+    ? history.map(h => `  [${h.outcome}] ${h.explanation}`).join('\n')
+    : '  (none yet)';
+
+  return `=== WINDOW #${req.windowId} ===
+Player: ${w.playerLanded}/${w.playerAttempts} landed (${acc}%) | hooks ${hookPct}% | straights ${stPct}%
+Defense: ${w.playerSlips} slips, ${w.playerBlocks} blocks, took ${w.playerCaught} hits
+Health: bot ${w.botHealth}/1000, player ${w.playerHealth}/1000 | tracking ${Math.round(w.trackingCoverage * 100)}%
+Bot attacks this window: ${w.botAttacks}
+
+Current strategy (rev ${req.strategyRevision}):
+  aggression=${s.aggression.toFixed(2)}, interval=${s.punchIntervalMs}ms, telegraph=${s.telegraphMs}ms
+  hooks=${s.hookWeight.toFixed(2)}, straights=${s.straightWeight.toFixed(2)}, jabs=${s.jabWeight.toFixed(2)}, leftBias=${s.leftBias.toFixed(2)}, defense=${s.defenseRate.toFixed(2)}
+  last reason: "${s.explanation}"
+
+Adaptation history (oldest→newest):
+${histLines}
+
+Call update_strategy now.`;
 }
 
 export async function coachWithStrategist(req: StrategistRequest, o: StrategistOptions = {}): Promise<StrategistResponse> {
@@ -133,7 +174,7 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
 
   const f = o.fetchImpl ?? fetch;
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), o.timeoutMs ?? 4000);
+  const timer = setTimeout(() => ctl.abort(), o.timeoutMs ?? 7000);
 
   try {
     const res = await f(`${o.baseUrl ?? "https://api.anthropic.com"}/v1/messages`, {
@@ -150,7 +191,7 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
         system: SYSTEM_PROMPT,
         tools: [tool()],
         tool_choice: { type: "tool", name: "update_strategy" },
-        messages: [{ role: "user", content: `Fight window:\n${JSON.stringify(req)}` }],
+        messages: [{ role: "user", content: buildUserMessage(req) }],
       }),
     });
 
@@ -168,7 +209,7 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
     }
 
     if (inp.skip) {
-      return { skip: true, ...req.strategy };
+      return { skip: true, ...req.strategy, uppercutWeight: 0 };
     }
 
     const explanation = String(inp.explanation ?? "").slice(0, MAX_EXPLANATION_CHARS).trim();
@@ -180,10 +221,10 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
       jabWeight: clamp(Number(inp.jabWeight ?? req.strategy.jabWeight), 0, 1),
       straightWeight: clamp(Number(inp.straightWeight ?? req.strategy.straightWeight), 0, 1),
       hookWeight: clamp(Number(inp.hookWeight ?? req.strategy.hookWeight), 0, 1),
-      uppercutWeight: clamp(Number(inp.uppercutWeight ?? req.strategy.uppercutWeight), 0, 1),
-      leftBias: clamp(Number(inp.leftBias ?? req.strategy.leftBias), -1, 1),
+      uppercutWeight: 0,
+      leftBias: clamp(Number(inp.leftBias ?? req.strategy.leftBias), 0, 1),
       defenseRate: clamp(Number(inp.defenseRate ?? req.strategy.defenseRate), 0, 0.8),
-      telegraphMs: Math.round(clamp(Number(inp.telegraphMs ?? req.strategy.telegraphMs), 200, 1000)),
+      telegraphMs: Math.round(clamp(Number(inp.telegraphMs ?? req.strategy.telegraphMs), 350, 1200)),
       explanation,
     };
   } catch (e) {

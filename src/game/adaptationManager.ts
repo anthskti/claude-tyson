@@ -83,12 +83,17 @@ export class AdaptationManager {
   private pending: PendingEval | null = null;
   private history: AdaptationHistory[] = [];
   private opts: AdaptationManagerOptions;
+  private activeMatchId: bigint | undefined;
 
   constructor(opts: AdaptationManagerOptions) {
     this.opts = opts;
   }
 
   async onWindow(window: FightWindowRow, strategy: StrategyRow | undefined) {
+    // Only process windows from the match that started during this session.
+    // SpacetimeDB replays all historical rows on connect; ignoring them avoids
+    // flooding the adaptation loop with stale data from previous fights.
+    if (this.activeMatchId === undefined || window.matchId !== this.activeMatchId) return;
     const { log, onAdaptation, requestStrategist, server } = this.opts;
 
     // Evaluate the previous applied strategy before requesting a new one.
@@ -126,9 +131,14 @@ export class AdaptationManager {
       return;
     }
 
-    const playerAttempts =
-      window.playerJabs + window.playerStraights + window.playerHooks +
-      window.playerUppercuts + window.playerUnclassified;
+    // Only count the punch types the game actually uses (hooks + straights).
+    const playerAttempts = window.playerStraights + window.playerHooks;
+
+    // Skip if player barely threw any punches — Claude would skip anyway.
+    if (playerAttempts < 3) {
+      log(`W#${window.id} skip — playerAttempts ${playerAttempts}`);
+      return;
+    }
 
     const req: StrategistRequest = {
       windowId: String(window.id),
@@ -161,7 +171,7 @@ export class AdaptationManager {
         telegraphMs: strategy.telegraphMs,
         explanation: strategy.explanation,
       },
-      history: this.history.slice(-2),
+      history: this.history.slice(-3),
     };
 
     this.state = "requesting";
@@ -185,7 +195,7 @@ export class AdaptationManager {
         jabWeight: response.jabWeight,
         straightWeight: response.straightWeight,
         hookWeight: response.hookWeight,
-        uppercutWeight: response.uppercutWeight,
+        uppercutWeight: 0,
         leftBias: response.leftBias,
         defenseRate: response.defenseRate,
         telegraphMs: response.telegraphMs,
@@ -196,7 +206,7 @@ export class AdaptationManager {
         windowId: window.id,
         preBotHealth: window.botHealth,
         prePlayerLanded: window.playerLanded,
-        prePlayerAttempts: playerAttempts,
+        prePlayerAttempts: window.playerStraights + window.playerHooks,
         explanation: response.explanation,
       };
       this.state = "applied";
@@ -207,18 +217,23 @@ export class AdaptationManager {
   }
 
   private evaluate(nextWindow: FightWindowRow, prev: PendingEval): "improved" | "worsened" | "inconclusive" {
-    const nextAttempts =
-      nextWindow.playerJabs + nextWindow.playerStraights + nextWindow.playerHooks +
-      nextWindow.playerUppercuts + nextWindow.playerUnclassified;
+    const nextAttempts = nextWindow.playerStraights + nextWindow.playerHooks;
+    const hasEnoughData = prev.prePlayerAttempts >= 8 && nextAttempts >= 8;
 
     const nextRate = nextAttempts > 0 ? nextWindow.playerLanded / nextAttempts : 0;
     const prevRate = prev.prePlayerAttempts > 0 ? prev.prePlayerLanded / prev.prePlayerAttempts : 0;
     const healthDelta = nextWindow.botHealth - prev.preBotHealth;
 
-    // Bot holding better (more health) OR player landing significantly less → improved.
-    if (healthDelta > 5 || nextRate < prevRate - 0.06) return "improved";
-    // Bot taking more damage OR player landing significantly more → worsened.
-    if (healthDelta < -10 || nextRate > prevRate + 0.06) return "worsened";
+    // Bot barely lost health this window → strategy is working.
+    if (healthDelta >= -4) return "improved";
+    // Bot took significant damage → strategy worsened.
+    if (healthDelta < -10) return "worsened";
+
+    // Accuracy delta only reliable with enough samples.
+    if (hasEnoughData) {
+      if (nextRate < prevRate - 0.05) return "improved";
+      if (nextRate > prevRate + 0.05) return "worsened";
+    }
     return "inconclusive";
   }
 
@@ -231,9 +246,10 @@ export class AdaptationManager {
     return `${analysis}\n\nAdaptation log:\n${lines.join("\n")}`;
   }
 
-  reset() {
+  reset(matchId?: bigint) {
     this.state = "idle";
     this.pending = null;
     this.history = [];
+    this.activeMatchId = matchId;
   }
 }

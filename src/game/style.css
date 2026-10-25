@@ -748,38 +748,41 @@ code {
 #ai-log-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
 
 /* ─── Wii-style Claude crab analysis bubble ─────────────────────────────── */
+/* ─── Wii-style Claude crab analysis bubble — fixed bottom-center panel ─── */
 .wii-crab-bubble {
   position: fixed;
-  min-width: 260px; max-width: 340px;
-  /* tail anchor = crab head; bubble appears above */
-  transform: translate(-50%, calc(-100% - 26px)) scale(0.75);
+  bottom: 28px;
+  left: 50%;
+  width: min(500px, 90vw);
+  /* hidden state: slide down + fade */
+  transform: translateX(-50%) translateY(20px);
   background: #fff;
-  border-radius: 22px;
+  border-radius: 20px;
   border: 3px solid #111;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 28px rgba(255,100,20,0.25);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.55), 0 0 32px rgba(255,100,20,0.2);
   padding: 0 0 14px;
   opacity: 0;
   pointer-events: none;
   z-index: 300;
-  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1);
+  transition: opacity 0.4s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1);
 }
 .wii-crab-bubble.visible {
   opacity: 1;
-  transform: translate(-50%, calc(-100% - 26px)) scale(1);
+  transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
-/* Tail pointing down toward crab */
+/* Tail pointing UP toward the crab in the 3D scene */
 .wii-crab-bubble::before {
   content: '';
-  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: -18px; left: 38%; transform: translateX(-50%);
   border-left: 13px solid transparent; border-right: 13px solid transparent;
-  border-top: 18px solid #111;
+  border-bottom: 18px solid #111;
 }
 .wii-crab-bubble::after {
   content: '';
-  position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: -11px; left: 38%; transform: translateX(-50%);
   border-left: 10px solid transparent; border-right: 10px solid transparent;
-  border-top: 12px solid #fff;
+  border-bottom: 12px solid #fff;
   z-index: 1;
 }
 /* Orange Claude header */
@@ -801,12 +804,12 @@ code {
   letter-spacing: 0.14em; color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.35);
 }
-/* Body text — Claude chat streaming style */
+/* Body text */
 #wii-text {
-  margin: 12px 16px 10px;
+  margin: 12px 18px 10px;
   font-family: 'Nunito', sans-serif;
-  font-size: 14px; font-weight: 700; line-height: 1.55;
-  color: #111; min-height: 3.5em;
+  font-size: 15px; font-weight: 700; line-height: 1.5;
+  color: #111; min-height: 2.4em;
 }
 /* Blinking orange cursor while streaming */
 .wii-cursor {
@@ -1026,12 +1029,15 @@ code {
 .wss-dialog {
   position: relative; z-index: 2;
   width: min(390px, 90vw);
-  border-radius: 10px; overflow: hidden;
-  background: #e8e8e8;
+  border-radius: 18px; overflow: hidden;
+  background: rgba(8, 14, 30, 0.82);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
   box-shadow:
-    0 0 0 3px rgba(0,0,0,0.65),
-    0 28px 72px rgba(0,0,0,0.9),
-    inset 0 1px 0 rgba(255,255,255,0.6);
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 32px 80px rgba(0,0,0,0.85),
+    0 0 60px rgba(255,140,66,0.08);
   animation: dialog-pop 0.48s cubic-bezier(0.34,1.56,0.64,1) 0.08s both;
 }
 @keyframes dialog-pop {
@@ -1039,77 +1045,78 @@ code {
   to   { transform: none; opacity:1; }
 }
 
-/* Blue Wii-channel header */
+/* Blue header */
 .wss-dialog-header {
-  background: linear-gradient(180deg, #4a8ee8 0%, #1a55c0 100%);
-  padding: 9px 16px 10px;
-  display: flex; align-items: center; gap: 9px;
-  border-bottom: 2px solid #1040a0;
+  background: linear-gradient(180deg, #3a7ee0 0%, #1448b8 100%);
+  padding: 10px 18px 11px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 .wss-dialog-icon {
-  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
-  border: 2px solid rgba(255,255,255,0.5);
-  background: rgba(255,255,255,0.18);
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.45);
+  background: rgba(255,255,255,0.16);
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.82rem; font-weight: 900; color: #fff; line-height: 1;
+  font-size: 0.9rem; font-weight: 900; color: #fff; line-height: 1;
 }
 .wss-dialog-header-title {
   font-family: 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.75rem; font-weight: 700;
-  letter-spacing: 0.18em; text-transform: uppercase; color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  font-size: 0.76rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase; color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
 /* Two-column body: diagram | text */
 .wss-dialog-body {
-  padding: 14px 16px 12px;
+  padding: 16px 18px 14px;
   display: flex; gap: 14px; align-items: flex-start;
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
 }
 .wss-diagram-svg { width: 88px; height: 88px; flex-shrink: 0; }
 .wss-dialog-textcol { flex: 1; }
 .wss-dialog-title {
   font-family: 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.8rem; font-weight: 800;
-  color: #111; margin: 0 0 7px; line-height: 1.3;
+  font-size: 0.82rem; font-weight: 800;
+  color: #fff; margin: 0 0 8px; line-height: 1.3;
 }
 .wss-dialog-text {
   font-family: 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.72rem; font-weight: 400; line-height: 1.7; color: #333; margin: 0;
+  font-size: 0.73rem; font-weight: 400; line-height: 1.75;
+  color: rgba(255,255,255,0.55); margin: 0;
 }
-.wss-dialog-text b { color: #111; font-weight: 700; }
+.wss-dialog-text b { color: rgba(255,255,255,0.9); font-weight: 700; }
 
 /* Footer */
 .wss-dialog-footer {
-  padding: 10px 16px 11px;
-  background: #ddd;
+  padding: 11px 18px 12px;
+  background: rgba(255,255,255,0.04);
   display: flex; align-items: center; justify-content: space-between;
 }
 .wss-dialog-hint {
   font-family: 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.66rem; color: #777; letter-spacing: 0.03em;
+  font-size: 0.66rem; color: rgba(255,255,255,0.28); letter-spacing: 0.04em;
 }
 
-/* Wii green A-button */
+/* A-button — blue to match header */
 .wss-btn {
   display: inline-flex; align-items: center; gap: 7px;
   font-family: 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.74rem; font-weight: 700;
+  font-size: 0.75rem; font-weight: 700;
   letter-spacing: 0.1em; text-transform: uppercase; color: #fff;
-  background: linear-gradient(180deg, #44b044 0%, #267226 100%);
+  background: linear-gradient(180deg, #3a7ee0 0%, #1448b8 100%);
   border: none; border-radius: 20px;
-  padding: 8px 20px 9px; cursor: pointer;
-  box-shadow: 0 3px 0 #1a5c1a, 0 5px 14px rgba(0,0,0,0.3);
+  padding: 9px 22px 10px; cursor: pointer;
+  box-shadow: 0 3px 0 #0c2e80, 0 5px 16px rgba(0,0,0,0.4);
   transition: filter 0.1s, transform 0.08s, box-shadow 0.08s;
 }
 .wss-btn-a {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0;
-  background: rgba(255,255,255,0.22); border: 1.5px solid rgba(255,255,255,0.45);
-  font-size: 0.68rem; font-weight: 900; color: #fff;
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(255,255,255,0.2); border: 1.5px solid rgba(255,255,255,0.4);
+  font-size: 0.7rem; font-weight: 900; color: #fff;
 }
-.wss-btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 0 #1a5c1a, 0 7px 18px rgba(0,0,0,0.35); }
-.wss-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a5c1a; }
+.wss-btn:hover { filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 5px 0 #0c2e80, 0 8px 20px rgba(0,0,0,0.45); }
+.wss-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #0c2e80; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    VS SCREEN  — Street Fighter / Tekken style theatrical intro
@@ -1130,183 +1137,159 @@ code {
   to   { opacity: 0; transform: scale(1.04); }
 }
 
-/* Subtle scanline background texture */
+/* Scanline grain */
 .vs-bg-layer {
-  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  position: absolute; inset: 0; pointer-events: none; z-index: 5;
   background: repeating-linear-gradient(
-    to bottom,
-    transparent 0px,
-    transparent 3px,
-    rgba(0,0,0,0.08) 3px,
-    rgba(0,0,0,0.08) 4px
+    to bottom, transparent 0px, transparent 2px,
+    rgba(0,0,0,0.055) 2px, rgba(0,0,0,0.055) 3px
   );
 }
 
-/* Radial spotlight beams from each side */
-.vs-spotlight {
-  position: absolute; inset: 0; pointer-events: none;
+/* ── Fighter panels ─────────────────────────────────────────────── */
+.vs-fighter {
+  flex: 1;
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow: hidden;
+  padding-bottom: clamp(70px, 14vh, 110px);
+}
+/* Player: diagonal right edge cut (SF6 style) */
+.vs-fighter.player-side {
   background:
-    radial-gradient(ellipse 45% 80% at 20% 50%, rgba(30,70,160,0.22) 0%, transparent 65%),
-    radial-gradient(ellipse 45% 80% at 80% 50%, rgba(200,120,0,0.22) 0%, transparent 65%);
-  z-index: 1;
-  animation: vs-spotlight-in 1s ease 0.3s both;
+    radial-gradient(ellipse 85% 70% at 48% 72%, #1a3a80 0%, #0a1e50 42%, #050e28 100%);
+  clip-path: polygon(0 0, calc(100% - 3vw) 0, 100% 100%, 0 100%);
+  animation: vs-slide-left 0.38s cubic-bezier(0.16,1,0.3,1) both;
+}
+/* CPU: diagonal left edge cut */
+.vs-fighter.cpu-side {
+  background:
+    radial-gradient(ellipse 85% 70% at 52% 72%, #5a2800 0%, #2e1200 42%, #120700 100%);
+  clip-path: polygon(3vw 0, 100% 0, 100% 100%, 0 100%);
+  animation: vs-slide-right 0.38s cubic-bezier(0.16,1,0.3,1) 0.06s both;
+}
+@keyframes vs-slide-left  { from { transform: translateX(-110%); } to { transform: none; } }
+@keyframes vs-slide-right { from { transform: translateX(110%);  } to { transform: none; } }
+
+/* Stage spotlight beam from top center */
+.vs-stage-light {
+  position: absolute; top: -10%; left: 50%; transform: translateX(-50%);
+  width: 70%; height: 90%;
+  background: radial-gradient(ellipse 100% 100% at 50% 0%, rgba(255,255,255,0.07) 0%, transparent 68%);
+  pointer-events: none; z-index: 0;
+  animation: vs-spotlight-in 0.8s ease 0.3s both;
 }
 @keyframes vs-spotlight-in { from { opacity:0; } to { opacity:1; } }
 
-/* Fighter panels */
-.vs-fighter {
-  flex: 1;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: flex-end;
-  gap: 0;
-  padding: 0 0 60px;
-  position: relative; z-index: 2;
-  overflow: hidden;
-}
-.vs-fighter.player-side {
-  background: linear-gradient(160deg, #0f1e38 0%, #0d1b2e 50%, #091425 100%);
-  border-right: 1px solid rgba(255,255,255,0.05);
-  animation: vs-slide-left 0.42s cubic-bezier(0.16,1,0.3,1) both;
-}
-.vs-fighter.cpu-side {
-  background: linear-gradient(200deg, #1e1200 0%, #170e00 50%, #0e0800 100%);
-  border-left: 1px solid rgba(255,255,255,0.05);
-  animation: vs-slide-right 0.42s cubic-bezier(0.16,1,0.3,1) 0.08s both;
-}
-@keyframes vs-slide-left  { from { transform: translateX(-115%); } to { transform: none; } }
-@keyframes vs-slide-right { from { transform: translateX(115%);  } to { transform: none; } }
-
-/* Portrait fill area */
-.vs-portrait-wrap {
-  position: absolute; inset: 0 0 80px;
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
-}
-.vs-portrait-bg {
-  position: absolute; inset: 0;
-}
-.player-bg {
-  background: radial-gradient(ellipse 70% 60% at 50% 60%, rgba(30,80,200,0.28) 0%, transparent 70%);
-}
-.cpu-bg {
-  background: radial-gradient(ellipse 70% 60% at 50% 60%, rgba(200,120,0,0.28) 0%, transparent 70%);
+/* Giant watermark letter — SF6 has these huge background letters */
+.vs-watermark {
+  position: absolute; bottom: -8%; left: 50%; transform: translateX(-50%);
+  font-family: 'Lilita One', cursive;
+  font-size: clamp(18rem, 38vw, 32rem);
+  line-height: 0.82; font-weight: 900; color: #fff;
+  opacity: 0.045; pointer-events: none; user-select: none;
+  letter-spacing: -0.04em; z-index: 0;
 }
 
-/* Avatar circle (initials fallback) */
+/* Character avatar circle */
 .vs-avatar {
-  width: clamp(110px,18vw,170px);
-  height: clamp(110px,18vw,170px);
+  width: clamp(120px, min(28vw, 34vh), 260px);
+  height: clamp(120px, min(28vw, 34vh), 260px);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-family: 'Lilita One', cursive;
-  font-size: clamp(2rem,5vw,3.2rem);
-  color: #fff;
-  border: 5px solid rgba(255,255,255,0.12);
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.05), 0 12px 48px rgba(0,0,0,0.7);
-  letter-spacing: 0.02em;
-  position: relative;
+  font-size: clamp(2rem, min(6vw, 8vh), 4.5rem);
+  color: #fff; letter-spacing: 0.02em;
+  position: relative; z-index: 2; flex-shrink: 0;
+  border: 4px solid rgba(255,255,255,0.14);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.06), 0 0 60px rgba(0,0,0,0.7), 0 20px 60px rgba(0,0,0,0.6);
   overflow: hidden;
-  z-index: 2;
-  transition: opacity 0.3s;
+  animation: vs-avatar-in 0.5s cubic-bezier(0.22,1,0.36,1) 0.18s both;
 }
-.vs-avatar::after {
+@keyframes vs-avatar-in {
+  from { transform: translateY(28px) scale(0.88); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.vs-avatar::before {
   content: '';
   position: absolute; inset: 0; border-radius: 50%;
-  background: linear-gradient(145deg, rgba(255,255,255,0.18) 0%, transparent 55%);
-  pointer-events: none;
+  background: linear-gradient(145deg, rgba(255,255,255,0.22) 0%, transparent 50%);
+  pointer-events: none; z-index: 1;
 }
 .player-side .vs-avatar {
-  background: radial-gradient(circle at 35% 35%, #3a7bd5 0%, #1a4e9e 50%, #0e2f6b 100%);
+  background: radial-gradient(circle at 38% 30%, #5a9aff 0%, #2056d0 40%, #0c2a80 100%);
 }
 .cpu-side .vs-avatar {
-  background: radial-gradient(circle at 35% 35%, #d48c1a 0%, #9a5c00 50%, #5c3200 100%);
-}
-/* When portrait image is loaded, show it instead of initials */
-.vs-avatar.has-portrait {
-  border-radius: 0; border: none; background: transparent;
-  box-shadow: none; width: 100%; height: 100%; max-width: none; max-height: none;
-}
-.vs-portrait-img {
-  width: 100%; height: 100%;
-  object-fit: contain; object-position: bottom center;
+  background: radial-gradient(circle at 38% 30%, #ff9040 0%, #c05000 40%, #5a1800 100%);
 }
 
-/* Name plate overlay at bottom of portrait area */
-.vs-name-plate {
-  position: relative; z-index: 3;
-  text-align: center;
-  padding: 0 12px;
+/* ── Bottom nameplate — SF6-style bar ─────────────────────────── */
+.vs-nameplate {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: clamp(8px, 1.5vh, 14px) 20px clamp(10px, 2.5vh, 20px);
+  text-align: center; z-index: 3;
+}
+.player-side .vs-nameplate {
+  background: linear-gradient(to top, rgba(10,24,70,0.98) 0%, rgba(10,24,70,0.6) 70%, transparent 100%);
+  border-top: 3px solid #3a70ff;
+  box-shadow: inset 0 1px 0 rgba(80,130,255,0.3);
+}
+.cpu-side .vs-nameplate {
+  background: linear-gradient(to top, rgba(40,16,0,0.98) 0%, rgba(40,16,0,0.6) 70%, transparent 100%);
+  border-top: 3px solid #e07020;
+  box-shadow: inset 0 1px 0 rgba(255,140,40,0.3);
 }
 .vs-name {
   font-family: 'Lilita One', cursive;
-  font-size: clamp(1.4rem,4vw,2.6rem);
-  color: #fff;
-  letter-spacing: 0.04em;
-  text-align: center;
-  text-shadow: 0 2px 16px rgba(0,0,0,0.8);
-  line-height: 1.1;
-  margin-bottom: 0.3rem;
+  font-size: clamp(1rem, min(3vw, 3.5vh), 1.8rem);
+  color: #fff; letter-spacing: 0.06em; text-transform: uppercase;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.9), 0 0 30px rgba(255,255,255,0.1);
+  line-height: 1.1; margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;
 }
 .vs-record {
   font-family: 'Nunito', sans-serif;
-  font-size: clamp(0.75rem,1.8vw,0.95rem);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.38);
+  font-size: clamp(0.7rem, 1.5vw, 0.85rem);
+  font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+  color: rgba(255,255,255,0.42);
 }
-/* Corner label strip at bottom of each panel */
-.vs-corner-label {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  height: 6px; z-index: 4;
-}
-.player-side .vs-corner-label { background: linear-gradient(90deg, #2a5fbd, #5090ff); }
-.cpu-side   .vs-corner-label { background: linear-gradient(90deg, #c87a00, #ffc820); }
 
-/* Center VS divider */
+/* ── Center VS element ─────────────────────────────────────────── */
 .vs-center {
   position: absolute; left: 50%; top: 50%;
   transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center;
-  z-index: 10;
-  pointer-events: none;
-  animation: vs-center-in 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.38s both;
+  z-index: 10; pointer-events: none;
+  animation: vs-center-in 0.48s cubic-bezier(0.34,1.56,0.64,1) 0.36s both;
 }
 @keyframes vs-center-in {
-  from { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
-  to   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+  from { transform: translate(-50%,-50%) scale(3); opacity: 0; }
+  to   { transform: translate(-50%,-50%) scale(1); opacity: 1; }
 }
 .vs-text {
   font-family: 'Lilita One', cursive;
-  font-size: clamp(4.5rem, 13vw, 9rem);
-  line-height: 1;
-  color: #ffc820;
-  letter-spacing: -0.03em;
+  font-size: clamp(3.5rem, min(11vw, 18vh), 7.5rem);
+  line-height: 1; color: #ffc820; letter-spacing: -0.04em;
   text-shadow:
-    0 0 60px rgba(255,200,32,0.55),
-    0 4px 0 #8a5200,
-    0 8px 2px rgba(0,0,0,0.6);
+    0 0 80px rgba(255,200,32,0.7), 0 0 120px rgba(255,160,0,0.35),
+    0 5px 0 #7a4200, 0 10px 4px rgba(0,0,0,0.7);
 }
 
-/* Animated electric clash line at center */
+/* Gold clash line down the center seam */
 .vs-clash-line {
-  width: 4px; height: 60vh;
+  width: 3px; height: 100vh;
   background: linear-gradient(to bottom,
-    transparent 0%,
-    rgba(255,200,32,0.6) 20%,
-    #ffd040 50%,
-    rgba(255,200,32,0.6) 80%,
-    transparent 100%
+    transparent 0%, rgba(255,200,32,0.8) 30%,
+    #ffe060 50%, rgba(255,200,32,0.8) 70%, transparent 100%
   );
-  box-shadow:
-    0 0 8px 2px rgba(255,200,32,0.6),
-    0 0 20px 6px rgba(255,140,0,0.3);
-  animation: vs-clash-in 0.25s ease-out 0.42s both;
-  border-radius: 2px;
+  box-shadow: 0 0 12px 3px rgba(255,200,32,0.7), 0 0 30px 8px rgba(255,120,0,0.35);
+  animation: vs-clash-in 0.2s ease-out 0.38s both;
+  border-radius: 2px; margin-top: -6px;
 }
 @keyframes vs-clash-in {
   from { opacity: 0; transform: scaleY(0); }
-  to   { opacity: 1; transform: scaleY(1); }
+  to   { opacity: 1; transform: none; }
 }
 
 .vs-skip-hint {

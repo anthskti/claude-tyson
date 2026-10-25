@@ -168,15 +168,11 @@ const server = new GameServer({
 const hud = new Hud({
   fightBot: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
-    hud.showVsScreen(hudState.playerName ?? 'FIGHTER', hudState.profile, () => {
-      beforeFight(() => server.startBotMatch());
-    }, renderer);
+    beforeFight(() => server.startBotMatch());
   },
   findPvp: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
-    hud.showVsScreen(hudState.playerName ?? 'FIGHTER', hudState.profile, () => {
-      beforeFight(() => server.joinPvp());
-    }, renderer);
+    beforeFight(() => server.joinPvp());
   },
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),
@@ -244,7 +240,7 @@ function refresh() {
     losingDialogueShown = false;
     koFlashTriggered = false;
     slowmoUntil = -Infinity;
-    adaptationManager.reset(view.match.id);
+    adaptationManager.reset(BigInt(view.match.id));
     cinematicMode = false;
     cornerScene.exit();
     wheel.show();
@@ -267,7 +263,7 @@ function refresh() {
         cinematicMode = true;
         hudState.cinematic = true;
         wheel.hide();
-        cornerScene.enter(server.conn, snap.match.id, won, reason, wheel.totalClanks);
+        cornerScene.enter(server.conn, snap.match.id, won, reason, wheel.totalClanks, hudState.playerName);
       }, 2400);
     }
   }
@@ -475,6 +471,9 @@ renderer.setAnimationLoop(() => {
     cinematicMode = cinematic;
     hudState.cinematic = cinematic;
     hud.render(hudState); // show/hide menu immediately when cinematic state changes
+    // Hide the opponent model during the corner coach scene so it doesn't
+    // appear in the background of the cinematic shot.
+    opponent.root.visible = !cinematic;
     if (!cinematic) {
       // Snap camera back to ring-facing position — the corner scene leaves the
       // camera at a corner position with a yaw that the main loop never

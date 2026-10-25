@@ -18,6 +18,7 @@ export interface FightWindowSummary {
 
 export interface AnalysisRequest {
   matchId: string;
+  playerName?: string;
   result: { won: boolean; reason: string };
   windows: FightWindowSummary[];
   adaptationCount: number;
@@ -41,17 +42,20 @@ export const DEFAULT_ANALYSIS_MODEL = "claude-haiku-4-5-20251001";
 
 const MAX_BODY_BYTES = 32_000;
 
-const SYSTEM_PROMPT = `You are Claude Tyson's corner trainer. You're a gruff, experienced boxing coach who just watched this fight — you know EXACTLY what happened because you were the opponent's AI brain that adapted to beat the player.
+const SYSTEM_PROMPT = `You are Claude Crab, an enthusiastic boxing coach and gym trainer who genuinely wants to see this fighter grow. Give a post-match analysis in 2 to 3 sentences covering what went well and the main thing to work on.
 
-Write 2–3 short paragraphs. No headers. No bullets. Just talk like a trainer in the corner between rounds — sharp, direct, caring. Under 110 words total.
+Style: warm, direct, encouraging but honest. Think Wii Fit trainer energy crossed with a real boxing corner coach. Address the fighter by name if provided.
 
-Assess their skill from the data:
-- Beginner (low accuracy, few attempts, short fight): start with fundamentals — guard position, basic jab-straight combos, slipping instead of getting hit. Don't overload them.
-- Intermediate/advanced (decent accuracy, survives full fight, uses variety): go deeper — counterpunching timing, pattern breaks, specific weaknesses you exploited.
-
-You ADAPTED to beat them. Reference what you found and used against them. If you raised defense because their hooks were predictable, say that. Make it feel like the AI genuinely understood their game.
-
-End with one concrete thing to practice next time. Make it stick.`;
+Rules:
+- Exactly 2 to 3 sentences. No more.
+- No dashes, em dashes, colons, semicolons, or asterisks anywhere in the output.
+- No stats, numbers, or percentages. Describe patterns and tendencies in plain language.
+- This fighter only throws hooks and straights. Never mention jabs or uppercuts.
+- Base everything on patterns across the whole fight, not single moments.
+- If they won, still identify the main habit to sharpen. If they lost, lead with what showed genuine promise.
+- Give practical actionable boxing advice the way a real gym trainer would.
+- No mention of future sessions, next time, or anything outside this fight.
+- No markdown, no bold, no bullet points. Plain sentences only.`;
 
 function offlineAnalysis(req: AnalysisRequest): AnalysisResponse {
   const total = req.windows.reduce((s, w) => s + w.playerAttempts, 0);
@@ -62,16 +66,16 @@ function offlineAnalysis(req: AnalysisRequest): AnalysisResponse {
   let text: string;
   if (total < 5) {
     text = won
-      ? "You got there, but I barely saw you throw. You need to commit — jab to find the range, then follow up. Standing back waiting doesn't win fights."
-      : "You didn't throw enough for me to work with. The bot doesn't have to be perfect — it just has to be there when you aren't. Get your hands up, stay active, start with the jab.";
+      ? "Win, but you barely threw — get your hands moving or the next one won't be so easy. Stay active: straight to set range, hook to finish."
+      : "You didn't throw enough for me to read. Hands up, stay active — mix your straights and hooks and make the bot react to you.";
   } else if (rate < 25) {
     text = won
-      ? `You threw ${total} shots and landed ${landed}. That's too low a rate to win consistently — you got lucky this time. Work on timing: don't chase the bot, make it come to you, then counter.`
-      : `You threw ${total} shots and only ${landed} landed. The bot figured out your timing fast. When the same combination stops working, switch it up immediately — jab to disrupt, then change your angle.`;
+      ? `${landed}/${total} landed — too low to rely on. Stop chasing and make the bot come to you, then counter.`
+      : `${landed}/${total} landed — the bot cracked your timing. Switch up combos the moment one stops working.`;
   } else {
     text = won
-      ? `Solid work — ${landed} out of ${total} connected. You read the bot well and stayed composed. Now push that further: after you land a combo, don't reset to the same spot. Move and make the bot adjust to you.`
-      : `You were landing punches — ${landed} out of ${total} — but the bot still found a way through. Your defense breaks down after you commit. The moment you finish a combo, your hands need to come back up. That's the gap it exploited.`;
+      ? `${landed}/${total} connected — solid. After a combo, don't reset to the same spot; move and make the bot guess.`
+      : `${landed}/${total} landed but your hands dropped after each combo — that's the gap it used. Hands back up the instant you finish.`;
   }
   return { text, source: "offline" };
 }
@@ -82,24 +86,25 @@ function buildUserPrompt(req: AnalysisRequest): string {
   const slips = req.windows.reduce((s, w) => s + w.playerSlips, 0);
   const blocks = req.windows.reduce((s, w) => s + w.playerBlocks, 0);
   const caught = req.windows.reduce((s, w) => s + w.playerCaught, 0);
-  const jabs = req.windows.reduce((s, w) => s + w.playerJabs, 0);
   const hooks = req.windows.reduce((s, w) => s + w.playerHooks, 0);
   const straights = req.windows.reduce((s, w) => s + w.playerStraights, 0);
-  const uppers = req.windows.reduce((s, w) => s + w.playerUppercuts, 0);
   const acc = total > 0 ? Math.round((landed / total) * 100) : 0;
-  const lastHealth = req.windows.at(-1)?.playerHealth ?? 100;
+  const lastHealth = req.windows.at(-1)?.playerHealth ?? 1000;
   const skill = total < 10 || acc < 20 ? 'beginner' : acc > 40 && req.windows.length >= 4 ? 'advanced' : 'intermediate';
 
-  return `Outcome: ${req.result.won ? 'Claude Tyson WON' : 'player won'} by ${req.result.reason}.
+  const name = req.playerName ?? 'the fighter';
+  const outcome = req.result.won ? `${name} WON` : `${name} LOST`;
+  return `Player name: ${name}
+Outcome: ${outcome} by ${req.result.reason}.
 Skill level (inferred): ${skill}
 Total punches thrown: ${total} | landed: ${landed} (${acc}%)
-Punch mix: jabs ${jabs}, straights ${straights}, hooks ${hooks}, uppercuts ${uppers}
+Punch mix: straights ${straights}, hooks ${hooks}
 Defense: ${slips} slips, ${blocks} blocks, took ${caught} hits
-Player health remaining: ${lastHealth}/100
-Claude adapted ${req.adaptationCount} times during the fight.
+Player health remaining: ${lastHealth}/1000
+Bot adapted ${req.adaptationCount} times during the fight.
 Fight windows (each ~6s): ${req.windows.length}
 
-Give them your corner speech now.`;
+Give them your post-match analysis now. Address them by name. No dashes, colons, semicolons, em dashes, or asterisks.`;
 }
 
 export async function analyzeWithClaude(req: AnalysisRequest, o: AnalysisOptions = {}): Promise<AnalysisResponse> {
@@ -121,7 +126,7 @@ export async function analyzeWithClaude(req: AnalysisRequest, o: AnalysisOptions
       },
       body: JSON.stringify({
         model: o.model ?? DEFAULT_ANALYSIS_MODEL,
-        max_tokens: 350,
+        max_tokens: 250,
         system: SYSTEM_PROMPT,
         messages: [{
           role: "user",

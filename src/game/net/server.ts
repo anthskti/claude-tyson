@@ -76,6 +76,7 @@ export class GameServer {
       .withUri(URI)
       .withDatabaseName(DB_NAME)
       .withToken(readToken())
+      .withCompression('none')
       .onConnect((conn, identity, token) => {
         this.conn = conn;
         this.identity = identity;
