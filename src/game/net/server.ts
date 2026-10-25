@@ -1,9 +1,13 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables } from '../module_bindings';
 import { poseOf, type MotionEvent, type Observation } from '../cv/contract';
+import { RING_COUNT } from '../scene/arena';
 
 // Thin wrapper over the generated SpacetimeDB bindings: connection, subscriptions,
-// a derived view of "my current match", and throttled CV forwarding.
+// a derived view of "my current match" and of every ring, and throttled CV forwarding.
+//
+// Subscriptions cover live matches, the bot exhibition, and my own latest match, never
+// the whole history: every spectator would otherwise download every fight ever played.
 
 const URI = process.env.NEXT_PUBLIC_STDB_HOST ?? 'ws://localhost:3000';
 const DB_NAME = process.env.NEXT_PUBLIC_STDB_DB ?? 'claude-tyson';
@@ -25,10 +29,21 @@ export interface MatchView {
   strategy?: StrategyRow;
 }
 
+/** What one ring shows: its live match, or an exhibition that just ended. */
+export interface RingView {
+  ring: number;
+  match?: MatchRow;
+  fighters: FighterRow[]; // by slot
+}
+
 export interface ServerEvents {
   onStatus(status: 'connecting' | 'online' | 'offline', detail?: string): void;
   onAttack(attack: AttackRow, view: MatchView): void;
   onAttackResolved(attack: AttackRow, view: MatchView): void;
+  /** Any ring's attacks, mine included, for the arena's third-person boxers. */
+  onRingAttack(attack: AttackRow): void;
+  onRingAttackResolved(attack: AttackRow): void;
+  onError(message: string): void;
   onChange(): void;
   onFightWindow?: (window: FightWindowRow, strategy: StrategyRow | undefined) => void;
 }
@@ -63,6 +78,7 @@ export class GameServer {
   private lastPoseSent = 0;
   private lastPoseKey = '';
   private forwarded = new Set<string>();
+  private mine?: { matchId: bigint; handle: { unsubscribe(): void } };
 
   private events: ServerEvents;
 
@@ -82,22 +98,27 @@ export class GameServer {
         this.identity = identity;
         writeToken(token);
         this.bindTables(conn);
+        const live = tables.fightMatch.where(m => m.status.eq('active'));
+        // Exhibitions are deleted soon after they end, so this set stays tiny.
+        const shows = tables.fightMatch.where(m => m.mode.eq('exhibition'));
         conn
           .subscriptionBuilder()
           .onApplied(() => {
             this.events.onStatus('online');
             this.events.onChange();
           })
+          .onError(ctx => this.events.onStatus('offline', ctx.event?.message ?? 'subscription failed'))
           .subscribe([
             tables.player,
-            tables.fighterProfile,
+            tables.fighterProfile.where(p => p.identity.eq(identity)),
             tables.queueEntry,
-            tables.fightMatch,
-            tables.fighter,
-            tables.attack,
-            tables.botStrategy,
-            tables.fightWindow,
-            tables.fightResult,
+            live,
+            live.rightSemijoin(tables.fighter, (m, f) => m.id.eq(f.matchId)),
+            live.rightSemijoin(tables.attack, (m, a) => m.id.eq(a.matchId)),
+            live.rightSemijoin(tables.botStrategy, (m, s) => m.id.eq(s.matchId)),
+            shows,
+            shows.rightSemijoin(tables.fighter, (m, f) => m.id.eq(f.matchId)),
+            shows.rightSemijoin(tables.fightResult, (m, r) => m.id.eq(r.matchId)),
           ]);
       })
       .onConnectError((_ctx, err) => this.events.onStatus('offline', err.message))
@@ -109,7 +130,14 @@ export class GameServer {
     const changed = () => this.events.onChange();
     conn.db.fightMatch.onInsert(changed);
     conn.db.fightMatch.onUpdate(changed);
-    conn.db.fighter.onInsert(changed);
+    conn.db.fighter.onInsert((_ctx, f) => {
+      if (this.isMe(f)) this.followMatch(f.matchId);
+      changed();
+    });
+    conn.db.fighter.onDelete(changed);
+    conn.db.fightMatch.onDelete(changed);
+    conn.db.player.onInsert(changed);
+    conn.db.player.onUpdate(changed);
     conn.db.fighter.onUpdate(changed);
     conn.db.queueEntry.onInsert(changed);
     conn.db.queueEntry.onDelete(changed);
@@ -126,14 +154,32 @@ export class GameServer {
     });
 
     conn.db.attack.onInsert((_ctx, atk) => {
+      this.events.onRingAttack(atk);
       const view = this.matchView(atk.matchId);
       if (view) this.events.onAttack(atk, view);
     });
     conn.db.attack.onUpdate((_ctx, prev, atk) => {
       if (prev.result !== 'pending' || atk.result === 'pending') return;
+      this.events.onRingAttackResolved(atk);
       const view = this.matchView(atk.matchId);
       if (view) this.events.onAttackResolved(atk, view);
     });
+  }
+
+  /** Keep my latest match (and its result) after it leaves the live set. */
+  private followMatch(matchId: bigint) {
+    if (!this.conn || (this.mine && this.mine.matchId >= matchId)) return;
+    this.mine?.handle.unsubscribe();
+    const handle = this.conn
+      .subscriptionBuilder()
+      .subscribe([
+        tables.fightMatch.where(m => m.id.eq(matchId)),
+        tables.fighter.where(f => f.matchId.eq(matchId)),
+        tables.attack.where(a => a.matchId.eq(matchId)),
+        tables.botStrategy.where(s => s.matchId.eq(matchId)),
+        tables.fightResult.where(r => r.matchId.eq(matchId)),
+      ]);
+    this.mine = { matchId, handle };
   }
 
   private isMe(f: FighterRow): boolean {
@@ -159,6 +205,37 @@ export class GameServer {
     const active = views.find(v => v.match.status === 'active');
     if (active) return active;
     return views.sort((a, b) => Number(b.match.id - a.match.id))[0];
+  }
+
+  /** One entry per ring: its live match, else an exhibition still showing its result. */
+  rings(): RingView[] {
+    const rings: RingView[] = Array.from({ length: RING_COUNT }, (_, ring) => ({ ring, fighters: [] }));
+    if (!this.conn) return rings;
+    for (const m of this.conn.db.fightMatch.iter()) {
+      const slot = rings[m.ring];
+      if (!slot || (m.status !== 'active' && m.mode !== 'exhibition')) continue;
+      // An active match always wins the ring over one that already ended.
+      if (slot.match && (slot.match.status === 'active' || m.id < slot.match.id)) continue;
+      slot.match = m;
+    }
+    for (const r of rings) {
+      if (!r.match) continue;
+      const id = r.match.id;
+      r.fighters = [...this.conn.db.fighter.matchId.filter(id)].sort((a, b) => a.slot - b.slot);
+    }
+    return rings;
+  }
+
+  /** Display name for a fighter row: the player's name, or BOT / their corner. */
+  nameOf(f: FighterRow | undefined): string {
+    if (!f) return '—';
+    if (!f.identity) return 'BOT';
+    const name = this.conn?.db.player.identity.find(f.identity)?.name;
+    return name || (f.slot === 0 ? 'RED' : 'BLUE');
+  }
+
+  queueLength(): number {
+    return this.conn ? [...this.conn.db.queueEntry.iter()].length : 0;
   }
 
   result(matchId: bigint): ResultRow | undefined {
@@ -269,5 +346,6 @@ export class GameServer {
 
   private report = (err: unknown) => {
     console.warn('[server]', err);
+    this.events.onError(err instanceof Error ? err.message : String(err));
   };
 }

@@ -1,4 +1,4 @@
-# Boxing CV MVP
+# Boxing CV MVP (DEPRECIATED)
 
 A standalone Python OpenCV + MediaPipe provider, a local WebSocket bridge, and a small browser adapter for the team's proposed motion contracts. Copy this entire folder into your repo. It has no dependency on the research harness or its recordings.
 

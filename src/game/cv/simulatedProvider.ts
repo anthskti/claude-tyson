@@ -12,18 +12,19 @@ import type {
 // Keyboard stand-in for the real CV provider. Emits contract-shaped observations at
 // ~30 Hz and discrete MotionEvents, so the rest of the game can't tell the difference.
 //
-//   Body (hold)    A slip left · D slip right
-//   Guard (hold)   Q left block · E right block · W both
-//   Left fist      J left straight · U left hook
-//   Right fist     K right straight · I right hook
-//   T toggle tracking lost · C recalibrate
+//   Body (hold)    A dodge left · D dodge right
+//   Guard (hold)   B both gloves
+//   Left fist      J left straight · Q left hook
+//   Right fist     C right straight · E right hook
+//   T toggle tracking lost · X recalibrate
 
 export const SIM_KEYS: Record<string, { hand: 'left' | 'right'; type: PunchType }> = {
   j: { hand: 'left', type: 'left_straight' },
-  u: { hand: 'left', type: 'left_hook' },
-  k: { hand: 'right', type: 'right_straight' },
-  i: { hand: 'right', type: 'right_hook' },
+  c: { hand: 'right', type: 'right_straight' },
+  q: { hand: 'left', type: 'left_hook' },
+  e: { hand: 'right', type: 'right_hook' },
 };
+const CV_GUARD_KEYS = { left: 'cv_guard_left', right: 'cv_guard_right' } as const;
 
 const SAMPLE_HZ = 30;
 const SLIP_TARGET = 0.6; // body widths
@@ -32,10 +33,32 @@ const DODGE_EXIT = 0.15;
 const PUNCH_EXTEND_MS: Record<PunchType, number> = {
   left_straight: 160, right_straight: 230, left_hook: 300, right_hook: 300,
 };
+const PUNCH_LOCK_MS: Record<PunchType, { startup: number; recovery: number }> = {
+  left_straight: { startup: 120, recovery: 220 },
+  right_straight: { startup: 200, recovery: 320 },
+  left_hook: { startup: 220, recovery: 360 },
+  right_hook: { startup: 220, recovery: 360 },
+};
+const PUNCH_STAMINA: Record<PunchType, number> = {
+  left_straight: 5,
+  right_straight: 12,
+  left_hook: 16,
+  right_hook: 16,
+};
+const DODGE_STAMINA = 20;
+const BLOCK_DRAIN_PER_SEC = 4;
+const MAX_STAMINA = 200;
+const MAX_DEFENSE_HOLD_MS = 2000;
+const BLOCK_COOLDOWN_MS = 300;
+const DODGE_COOLDOWN_MS = 260;
+type Defense = 'block' | 'dodge_left' | 'dodge_right';
+const BLOCK_INPUTS = ['b', CV_GUARD_KEYS.left, CV_GUARD_KEYS.right];
 const CALIBRATION_MS = 800;
 
 export class SimulatedCvProvider implements CvProvider {
   readonly source = 'synthetic' as const;
+
+  constructor(private readonly now: () => number = () => performance.now()) {}
 
   private sessionId = `sim-${Math.random().toString(36).slice(2, 8)}`;
   private calibrationId: string | null = null;
@@ -43,7 +66,11 @@ export class SimulatedCvProvider implements CvProvider {
   private trackingLost = false;
   private lateral = 0;
   private dodgeSide: 'left' | 'right' | null = null;
+  private actionReadyAt = 0;
+  private activeDefense: { action: Defense; startedAt: number } | null = null;
+  private stamina = 0;
   private held = new Set<string>();
+  private ignoreUntilRelease = new Set<string>();
   /** Physical keys ignored by the keyboard listener (e.g. punches/slips while the camera drives them). */
   blockedKeys = new Set<string>();
   private punchUntil = { left: 0, right: 0 };
@@ -57,9 +84,9 @@ export class SimulatedCvProvider implements CvProvider {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
     this.recalibrate();
-    this.lastTick = performance.now();
+    this.lastTick = this.now();
     this.timer = window.setInterval(() => {
-      const now = performance.now();
+      const now = this.now();
       this.step(now, (now - this.lastTick) / 1000);
       this.lastTick = now;
       const events = this.pending;
@@ -78,15 +105,23 @@ export class SimulatedCvProvider implements CvProvider {
   /** Press a control key. The keyboard and the CV bridge (cv/bridge.ts) both drive input through here. */
   press(key: string) {
     const k = key.toLowerCase();
+    if (this.ignoreUntilRelease.has(k)) return;
     this.held.add(k);
     const punch = SIM_KEYS[k];
     if (punch) this.punch(punch.hand, punch.type);
     if (k === 't') this.trackingLost = !this.trackingLost;
-    if (k === 'c') this.recalibrate();
+    if (k === 'x') this.recalibrate();
   }
 
   release(key: string) {
-    this.held.delete(key.toLowerCase());
+    const k = key.toLowerCase();
+    this.held.delete(k);
+    this.ignoreUntilRelease.delete(k);
+  }
+
+  /** Updated from subscribed server state; affordability remains server-authoritative. */
+  setStamina(stamina: number) {
+    this.stamina = Math.max(0, Math.min(MAX_STAMINA, stamina));
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -99,7 +134,10 @@ export class SimulatedCvProvider implements CvProvider {
   };
 
   // Keys released while the window is unfocused never fire keyup.
-  private onBlur = () => this.held.clear();
+  private onBlur = () => {
+    this.held.clear();
+    this.ignoreUntilRelease.clear();
+  };
 
   private recalibrate() {
     this.calibrationId = `cal-${Math.random().toString(36).slice(2, 8)}`;
@@ -115,23 +153,41 @@ export class SimulatedCvProvider implements CvProvider {
   }
 
   private body(): Body {
-    const left = this.held.has('a');
-    const right = this.held.has('d');
-    // No leaning while a punch is out (the server rejects it too).
-    if (left === right || this.punchUntil.left || this.punchUntil.right) return 'neutral';
-    return left ? 'lean_left' : 'lean_right';
+    if (this.activeDefense?.action === 'dodge_left') return 'lean_left';
+    if (this.activeDefense?.action === 'dodge_right') return 'lean_right';
+    return 'neutral';
   }
 
   private guard(hand: 'left' | 'right', now: number): Guard {
     if (this.punchUntil[hand] > now) return 'neutral'; // punching drops that guard
-    return this.held.has('w') || this.held.has(hand === 'left' ? 'q' : 'e') ? 'block' : 'neutral';
+    return this.activeDefense?.action === 'block' ? 'block' : 'neutral';
   }
 
   private step(now: number, dt: number) {
     if (!this.calibrationId && now >= this.calibratingUntil) {
       this.calibrationId = `cal-${Math.random().toString(36).slice(2, 8)}`;
     }
-    if (this.trackingState(now) !== 'good') return;
+    if (this.trackingState(now) !== 'good') {
+      if (this.activeDefense) this.endDefense(now);
+      this.lateral = 0;
+      this.dodgeSide = null;
+      return;
+    }
+
+    this.updateDefense(now);
+
+    if (this.activeDefense?.action === 'block') {
+      this.stamina = Math.max(0, this.stamina - BLOCK_DRAIN_PER_SEC * Math.max(0, dt));
+      if (this.stamina === 0) {
+        const heldInputs = BLOCK_INPUTS.filter(key => this.held.has(key));
+        for (const key of heldInputs) {
+          this.held.delete(key);
+          this.ignoreUntilRelease.add(key);
+        }
+        this.activeDefense = null;
+        this.dodgeSide = null;
+      }
+    }
 
     // Negative lateral = player-left (contract §2A).
     const body = this.body();
@@ -157,12 +213,65 @@ export class SimulatedCvProvider implements CvProvider {
   }
 
   private punch(hand: 'left' | 'right', type: PunchType) {
-    const now = performance.now();
-    // Detector owns rearming: no new punch until the previous one returned to guard.
-    if (this.trackingState(now) !== 'good' || this.punchUntil[hand]) return;
-    if (this.dodgeSide || this.body() !== 'neutral') return; // no swinging mid-lean
+    const now = this.now();
+    // Match the server's fighter-wide lock. Discrete punch events during recovery drop.
+    if (this.trackingState(now) !== 'good' || now < this.actionReadyAt) return;
+    if (this.stamina < PUNCH_STAMINA[type]) return;
+    if (this.activeDefense || this.requestedDefense()) return;
+    if (this.punchUntil[hand] > now) return;
+    const timing = PUNCH_LOCK_MS[type];
+    this.actionReadyAt = now + Math.max(timing.recovery, timing.startup + 150);
+    this.stamina -= PUNCH_STAMINA[type];
     this.punchUntil[hand] = now + PUNCH_EXTEND_MS[type];
     this.emit(hand === 'left' ? 'punch_left' : 'punch_right', now, type);
+  }
+
+  private requestedDefense(): Defense | null {
+    const left = this.held.has('a');
+    const right = this.held.has('d');
+    if (left !== right) return left ? 'dodge_left' : 'dodge_right';
+    if (BLOCK_INPUTS.some(key => this.held.has(key))) return 'block';
+    return null;
+  }
+
+  private updateDefense(now: number) {
+    const bodyRequested = this.held.has('a') !== this.held.has('d');
+    const blockRequested = BLOCK_INPUTS.some(key => this.held.has(key));
+
+    if (this.activeDefense) {
+      const { action, startedAt } = this.activeDefense;
+      if (now - startedAt >= MAX_DEFENSE_HOLD_MS) {
+        const heldInputs = action === 'block'
+          ? BLOCK_INPUTS.filter(key => this.held.has(key))
+          : [action === 'dodge_left' ? 'a' : 'd'].filter(key => this.held.has(key));
+        for (const key of heldInputs) {
+          this.held.delete(key);
+          this.ignoreUntilRelease.add(key);
+        }
+        this.endDefense(now);
+        return;
+      }
+
+      // A defense cannot switch directly into another one; the current pose must end first.
+      const stillHeld = action === 'block' ? bodyRequested || blockRequested : bodyRequested;
+      if (!stillHeld) this.endDefense(now);
+      return;
+    }
+
+    const requested = this.requestedDefense();
+    if (requested && now >= this.actionReadyAt) {
+      if (this.stamina <= 0 || (requested.startsWith('dodge_') && this.stamina < DODGE_STAMINA)) return;
+      this.activeDefense = { action: requested, startedAt: now };
+      if (requested.startsWith('dodge_')) this.stamina -= DODGE_STAMINA;
+    }
+  }
+
+  private endDefense(now: number) {
+    if (!this.activeDefense) return;
+    const cooldown = this.activeDefense.action === 'block' ? BLOCK_COOLDOWN_MS : DODGE_COOLDOWN_MS;
+    this.actionReadyAt = Math.max(this.actionReadyAt, now + cooldown);
+    this.activeDefense = null;
+    this.dodgeSide = null;
   }
 
   private emit(type: MotionEventType, now: number, punchType?: PunchType) {

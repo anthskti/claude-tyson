@@ -11,9 +11,11 @@ Start the scene from the repo root with `bun run dev` (http://localhost:3001). S
 | A | yes | Slip left |
 | D | yes | Slip right |
 | S | yes | Lean back |
-| Q | yes | Block with the left glove |
-| E | yes | Block with the right glove |
-| W | yes | Block with both gloves |
+| Q | yes | Raise the left glove |
+| E | yes | Raise the right glove |
+| W | yes | Raise both gloves |
+
+A block needs both gloves up (W, or Q and E together). One glove up does not block.
 
 ## Punches
 

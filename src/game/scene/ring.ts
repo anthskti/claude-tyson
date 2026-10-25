@@ -9,88 +9,67 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 // y = 0, ring centred on the origin.
 
 export const RING_HALF = 3; // 6 m inside the ropes
-const POST_HEIGHT = 1.6;
+const POST_HEIGHT = 1.5;
 const ROPE_HEIGHTS = [0.45, 0.85, 1.25];
-
-// ── Shared toon gradient map (3-step: shadow / mid / highlight) ───────────
-// Created once and reused across all MeshToonMaterials.
-const _toonGradientData = new Uint8Array([0, 128, 255]);
-const toonGradientMap = new THREE.DataTexture(_toonGradientData, 3, 1, THREE.RedFormat);
-toonGradientMap.minFilter = THREE.NearestFilter;
-toonGradientMap.magFilter = THREE.NearestFilter;
-toonGradientMap.needsUpdate = true;
-
-/** Cel-shaded material with the shared 3-step gradient. */
-function toon(color: number, emissive = 0x000000, emissiveIntensity = 0): THREE.MeshToonMaterial {
-  return new THREE.MeshToonMaterial({ color, gradientMap: toonGradientMap, emissive, emissiveIntensity });
-}
 
 export function buildPlaceholderRing(): THREE.Group {
   const ring = new THREE.Group();
   ring.name = 'placeholder-ring';
 
-  // Vivid CR-style ring colors
-  const canvasMat = toon(0x1a50cc);  // vivid blue canvas
-  const apronMat  = toon(0x102070);  // dark navy apron
-  const ropeMat   = toon(0xffd830);  // bright gold ropes
-  const postMat   = toon(0xffc820);  // CR gold posts
+  const canvasMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d4, roughness: 0.9 });
+  const apronMat = new THREE.MeshStandardMaterial({ color: 0x1d2a4a, roughness: 0.7 });
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.4 });
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x8a8f99, metalness: 0.8, roughness: 0.3 });
 
   // Canvas + apron skirt below it.
-  const canvas = new THREE.Mesh(new THREE.BoxGeometry(RING_HALF * 2 + 1, 0.12, RING_HALF * 2 + 1), canvasMat);
-  canvas.position.y = -0.06;
+  const canvas = new THREE.Mesh(new THREE.BoxGeometry(RING_HALF * 2 + 1, 0.1, RING_HALF * 2 + 1), canvasMat);
+  canvas.position.y = -0.05;
   canvas.receiveShadow = true;
   ring.add(canvas);
 
-  const apron = new THREE.Mesh(new THREE.BoxGeometry(RING_HALF * 2 + 1.2, 1.1, RING_HALF * 2 + 1.2), apronMat);
-  apron.position.y = -0.65;
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(RING_HALF * 2 + 1.1, 1.0, RING_HALF * 2 + 1.1), apronMat);
+  apron.position.y = -0.6;
   ring.add(apron);
 
-  // Centre logo circle — contrasting vivid yellow
+  // Centre logo ring painted on the canvas.
   const logo = new THREE.Mesh(
-    new THREE.RingGeometry(0.9, 1.1, 48),
-    toon(0xffd830)
+    new THREE.RingGeometry(0.9, 1.05, 64),
+    new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.9 })
   );
   logo.rotation.x = -Math.PI / 2;
-  logo.position.y = 0.003;
+  logo.position.y = 0.002;
   ring.add(logo);
 
-  // Inner star on centre circle
-  const innerCircle = new THREE.Mesh(new THREE.CircleGeometry(0.7, 48), toon(0x2a60ee));
-  innerCircle.rotation.x = -Math.PI / 2;
-  innerCircle.position.y = 0.004;
-  ring.add(innerCircle);
-
-  // Corner posts: bold cartoon colours
+  // Corner posts: red and blue corners, two neutral (white) corners.
   const corners: [number, number, number][] = [
-    [-RING_HALF, -RING_HALF, 0xee3322],  // player — vivid red
-    [ RING_HALF,  RING_HALF, 0xaa22ee],  // Claude — vivid purple
-    [ RING_HALF, -RING_HALF, 0xffd830],  // neutral — gold
-    [-RING_HALF,  RING_HALF, 0xffd830],  // neutral — gold
+    [-RING_HALF, -RING_HALF, 0xd63031],
+    [RING_HALF, RING_HALF, 0x0984e3],
+    [RING_HALF, -RING_HALF, 0xffffff],
+    [-RING_HALF, RING_HALF, 0xffffff],
   ];
   const cornerPos = corners.map(([x, z, padColor]) => {
-    // Chunkier posts (0.09 radius)
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, POST_HEIGHT, 12), postMat);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, POST_HEIGHT, 16), postMat);
     post.position.set(x, POST_HEIGHT / 2, z);
     post.castShadow = true;
     ring.add(post);
 
     const pad = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, ROPE_HEIGHTS[2] - ROPE_HEIGHTS[0] + 0.22, 0.28),
-      toon(padColor)
+      new THREE.BoxGeometry(0.22, ROPE_HEIGHTS[2] - ROPE_HEIGHTS[0] + 0.2, 0.22),
+      new THREE.MeshStandardMaterial({ color: padColor, roughness: 0.6 })
     );
     pad.position.set(x, (ROPE_HEIGHTS[0] + ROPE_HEIGHTS[2]) / 2, z);
     ring.add(pad);
     return new THREE.Vector3(x, 0, z);
   });
 
-  // Fatter ropes (0.035 radius)
+  // Ropes run between adjacent corners.
   const order = [0, 2, 1, 3];
   for (let i = 0; i < 4; i++) {
     const a = cornerPos[order[i]];
     const b = cornerPos[order[(i + 1) % 4]];
     for (const h of ROPE_HEIGHTS) {
       const curve = new THREE.LineCurve3(a.clone().setY(h), b.clone().setY(h));
-      const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 1, 0.035, 8), ropeMat);
+      const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 1, 0.025, 8), ropeMat);
       rope.castShadow = true;
       ring.add(rope);
     }
@@ -100,93 +79,25 @@ export function buildPlaceholderRing(): THREE.Group {
 }
 
 export function buildArena(scene: THREE.Scene) {
-  // CR deep-navy arena background
-  scene.background = new THREE.Color(0x0a1428);
-  scene.fog = new THREE.FogExp2(0x0a1428, 0.04);
+  scene.background = new THREE.Color(0x07080c);
+  // Far enough to make out the neighbouring rings (arena.ts), close enough to hide the floor's edge.
+  scene.fog = new THREE.Fog(0x07080c, 12, 48);
 
-  // ── Hardwood floor — bright warm orange planks ───────────────────────────
-  // y = -1.2: avoids Z-fighting with ring apron bottom (y = -0.6 - 0.5 = -1.1)
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(80, 80),
-    toon(0xe8982a)  // warm orange wood
+    new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 1 })
   );
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -1.2;
+  floor.position.y = -1.1;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Plank dividers — dark strips along Z, cartoon-flat
-  const plankMat = toon(0x8a5010);
-  for (let x = -18; x <= 18; x += 0.65) {
-    const plank = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 80), plankMat);
-    plank.rotation.x = -Math.PI / 2;
-    plank.position.set(x, -1.195, 0);
-    scene.add(plank);
-  }
+  scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x10121a, 0.35));
 
-  // ── Hanging heavy bags — bright cartoon red ──────────────────────────────
-  const bagMat   = toon(0xcc2810);  // vivid red bag
-  const capMat   = toon(0x991e08);  // darker red cap
-  const chainMat = toon(0xb0a888);  // light grey chain
-
-  for (const [bx, bz] of [[-9, -8], [9, -8]] as [number, number][]) {
-    const bag = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 1.6, 12), bagMat);
-    bag.position.set(bx, 5.6, bz);
-    bag.castShadow = true;
-    scene.add(bag);
-
-    const capGeo = new THREE.SphereGeometry(0.25, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
-    const cap = new THREE.Mesh(capGeo, capMat);
-    cap.position.set(bx, 6.4, bz);
-    scene.add(cap);
-
-    // Chunky chain links — alternating small cylinders
-    for (let cy = 0; cy < 4; cy++) {
-      const link = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.018, 5, 8), chainMat);
-      link.rotation.x = cy % 2 === 0 ? 0 : Math.PI / 2;
-      link.position.set(bx, 7.0 + cy * 0.22, bz);
-      scene.add(link);
-    }
-  }
-
-  // ── Overhead light rigs — cartoon lamp style ──────────────────────────────
-  const rigMat  = toon(0x223355);
-  const lampMat = toon(0xfff0a0, 0xffe040, 1.2);  // glowing yellow lamp
-
-  for (const rx of [-3.5, 3.5] as const) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 5.0), rigMat);
-    beam.position.set(rx, 8.8, -1.5);
-    scene.add(beam);
-
-    // Lamp cone (inverted cone = shade)
-    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.5, 10), toon(0x223355));
-    shade.rotation.x = Math.PI;  // point down
-    shade.position.set(rx, 8.45, -1.5);
-    shade.castShadow = true;
-    scene.add(shade);
-
-    // Glowing bulb inside
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), lampMat);
-    bulb.position.set(rx, 8.35, -1.5);
-    scene.add(bulb);
-  }
-
-  // ── Floor mat under the ring — dark blue square ──────────────────────────
-  const mat = new THREE.Mesh(
-    new THREE.BoxGeometry(RING_HALF * 2 + 3.5, 0.04, RING_HALF * 2 + 3.5),
-    toon(0x0e1e50)
-  );
-  mat.position.set(0, -1.18, 0);
-  scene.add(mat);
-
-  // ── Lighting — cartoon-friendly: strong ambient + 1 clean directional ────
-  // High ambient keeps toon shadow areas colourful, not black.
-  scene.add(new THREE.AmbientLight(0x8aa8dd, 1.4));
-
-  // Clean overhead directional — creates the toon light/shadow split
-  const key = new THREE.DirectionalLight(0xfff4cc, 3.5);
-  key.position.set(2, 10, 4);
-  key.target.position.set(0, 0, -1);
+  // Overhead rig: one shadow-casting key over the ring plus coloured rim lights.
+  const key = new THREE.SpotLight(0xfff4e0, 120, 20, Math.PI / 5, 0.4, 1.4);
+  key.position.set(0, 9, 0);
+  key.target.position.set(0, 0, 0);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   // Without bias the canvas self-shadows into acne (the "noisy floor").
@@ -194,15 +105,12 @@ export function buildArena(scene: THREE.Scene) {
   key.shadow.normalBias = 0.02;
   scene.add(key, key.target);
 
-  // Red corner fill — player side warmth
-  const rimRed = new THREE.PointLight(0xff4422, 20, 16, 1.4);
-  rimRed.position.set(-6, 5, 5);
-  scene.add(rimRed);
-
-  // Purple corner fill — Claude side
-  const rimPurple = new THREE.PointLight(0xaa22ff, 20, 16, 1.4);
-  rimPurple.position.set(6, 5, -8);
-  scene.add(rimPurple);
+  for (const [x, z, color] of [[-6, -6, 0xff5a5a], [6, 6, 0x5a8cff]] as const) {
+    const rim = new THREE.SpotLight(color, 40, 25, Math.PI / 6, 0.6, 1.2);
+    rim.position.set(x, 7, z);
+    rim.target.position.set(0, 1, 0);
+    scene.add(rim, rim.target);
+  }
 }
 
 /** World-space Y of the Arena.Floor quad, the surface the bot stands on. */
@@ -231,7 +139,15 @@ function canvasTopY(root: THREE.Object3D): number | null {
   return top;
 }
 
-export async function loadRing(url = '/boxing_ring.glb'): Promise<THREE.Object3D> {
+let ringAsset: Promise<THREE.Object3D> | undefined;
+
+/** A copy of the ring; every ring in the arena shares one load and its geometry. */
+export async function loadRing(): Promise<THREE.Object3D> {
+  ringAsset ??= loadRingModel('/boxing_ring.glb');
+  return (await ringAsset).clone();
+}
+
+async function loadRingModel(url: string): Promise<THREE.Object3D> {
   try {
     const gltf = await new GLTFLoader().loadAsync(url);
     gltf.scene.traverse(o => {

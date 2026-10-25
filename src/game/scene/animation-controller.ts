@@ -1,109 +1,133 @@
 import * as THREE from 'three';
 
-// Same mixer behaviour as the 3d-test controller: idle loops, one-shots fade in
-// at full weight (never to a T-pose) and return to idle when they finish.
-// Clip names follow the design contract. A missing punch falls back to Jab_L,
-// which is the only punch in the current claude_bot.glb.
-
 export type ClipSlot = 'jab' | 'cross' | 'left_hook' | 'right_hook' | 'block' | 'dodge_left' | 'dodge_right' | 'hit' | 'ko';
 export type HeldSlot = 'block' | 'dodge_left' | 'dodge_right';
 
-const CANDIDATES: Record<ClipSlot, string[]> = {
-  jab: ['Jab', 'Jab_L'],
-  cross: ['Cross'],
-  left_hook: ['Hook_L'],
-  right_hook: ['Hook_R'],
-  block: ['Block'],
-  dodge_left: ['Dodge_L'],
-  dodge_right: ['Dodge_R'],
-  hit: ['Hit_Head'],
-  ko: ['KO'],
+const CLIPS: Record<ClipSlot, string> = {
+  jab: 'Jab_L',
+  cross: 'Cross_R',
+  left_hook: 'Hook_L',
+  right_hook: 'Hook_R',
+  block: 'Hard_Block',
+  dodge_left: 'Left_Dodge',
+  dodge_right: 'Right_Dodge',
+  hit: 'Hit_Head',
+  ko: 'Knockout',
 };
-
+const IDLE_CLIP = 'Boxing_Idle';
+const IDLE_STEP_CLIP = 'Boxing_Idle_Right';
+const USED_CLIPS = new Set([IDLE_CLIP, IDLE_STEP_CLIP, ...Object.values(CLIPS)]);
+const IDLE_STEP_MIN_MS = 3000;
+const IDLE_STEP_MAX_MS = 7000;
+const MAX_DEFENSE_HOLD_MS = 2000;
+const DEFENSE_PAUSE_AT_SECONDS: Record<HeldSlot, number> = {
+  block: 0.33,
+  dodge_left: 0.25,
+  dodge_right: 0.25,
+};
 const PUNCH_SLOTS: ClipSlot[] = ['jab', 'cross', 'left_hook', 'right_hook'];
-
-function usableClip(name: string): boolean {
-  const n = name.toLowerCase();
-  return n !== 'rigaction' && !n.includes('stance');
-}
 
 export class BoxingAnimationController {
   private mixer: THREE.AnimationMixer;
   private actions = new Map<string, THREE.AnimationAction>();
   private currentAction: THREE.AnimationAction | null = null;
   private idleAction: THREE.AnimationAction | null = null;
+  private idleStepAction: THREE.AnimationAction | null = null;
   private heldAction: THREE.AnimationAction | null = null;
+  private heldSlot: HeldSlot | null = null;
   private fadeDuration: number;
   private isActionPlaying = false;
+  private playingVariation = false;
   private koLocked = false;
   private actionTimeout: ReturnType<typeof setTimeout> | null = null;
-  private onFinished = (e: { action: THREE.AnimationAction }) => {
-    if (this.koLocked) return;
-    if (this.currentAction === e.action && e.action !== this.idleAction && e.action !== this.heldAction) {
-      this.returnToRest();
+  private idleStepTimer: ReturnType<typeof setTimeout> | null = null;
+  private holdAtSeconds: number | null = null;
+  private defenseHoldStartedAt = 0;
+  private onFinished = (event: { action: THREE.AnimationAction }) => {
+    if (this.koLocked || this.currentAction !== event.action || event.action === this.idleAction) return;
+    if (event.action === this.heldAction) {
+      this.isActionPlaying = false;
+      event.action.paused = true;
+      if (this.holdAtSeconds !== null) event.action.time = this.holdAtSeconds;
+      return;
     }
+    this.returnToRest();
   };
 
   constructor(root: THREE.Object3D, clips: THREE.AnimationClip[], fadeDuration = 0.15) {
     this.mixer = new THREE.AnimationMixer(root);
     this.fadeDuration = fadeDuration;
     for (const clip of clips) {
-      if (!usableClip(clip.name)) continue;
-      const action = this.mixer.clipAction(clip);
-      this.actions.set(clip.name, action);
-      this.actions.set(clip.name.toLowerCase(), action);
+      if (USED_CLIPS.has(clip.name)) this.actions.set(clip.name, this.mixer.clipAction(clip));
     }
-    this.idleAction = this.findAction(['Boxing_Idle']) ?? this.actions.values().next().value ?? null;
+    this.idleAction = this.actions.get(IDLE_CLIP) ?? null;
+    this.idleStepAction = this.actions.get(IDLE_STEP_CLIP) ?? null;
     this.mixer.addEventListener('finished', this.onFinished as never);
   }
 
   playIdle(duration = this.fadeDuration): void {
     if (this.koLocked || !this.idleAction) return;
-    this.clearTimeout();
+    this.clearActionTimeout();
     this.heldAction = null;
+    this.heldSlot = null;
+    this.holdAtSeconds = null;
     this.startLoop(this.idleAction, duration);
     this.isActionPlaying = false;
+    this.playingVariation = false;
+    this.scheduleIdleStep();
   }
 
-  /** One-shot punch. Missing clips fall back to Jab_L. Returns false if nothing played. */
   playPunch(slot: ClipSlot): boolean {
     if (!PUNCH_SLOTS.includes(slot)) return false;
-    const action = this.findAction(CANDIDATES[slot]) ?? this.findAction(CANDIDATES.jab);
-    return this.playOneShot(action, 0.08);
+    return this.playOneShot(this.actions.get(CLIPS[slot]) ?? null, 0.08);
   }
 
   playHit(): boolean {
-    return this.playOneShot(this.findAction(CANDIDATES.hit), 0.1);
+    return this.playOneShot(this.actions.get(CLIPS.hit) ?? null, 0.1);
   }
 
-  /** Loop a block or dodge until releaseHeld. A missing clip leaves the current pose alone. */
+  /** Play a defense clip to its authored pause point, then hold until release or the 2s cap. */
   playHeld(slot: HeldSlot): boolean {
     if (this.koLocked) return false;
-    const action = this.findAction(CANDIDATES[slot]);
+    const action = this.actions.get(CLIPS[slot]);
     if (!action) return false;
     this.heldAction = action;
-    // Let a jab or hit finish, then returnToRest resumes this loop.
+    this.heldSlot = slot;
+    this.holdAtSeconds = Math.min(DEFENSE_PAUSE_AT_SECONDS[slot], action.getClip().duration);
+    this.defenseHoldStartedAt = performance.now();
     if (this.isActionPlaying) return true;
     if (this.currentAction === action) return true;
-    this.clearTimeout();
-    this.startLoop(action, this.fadeDuration);
-    this.isActionPlaying = false;
+    this.clearActionTimeout();
+    this.clearIdleStepTimer();
+    this.playOneShot(action, this.fadeDuration);
+    this.heldAction = action;
+    this.heldSlot = slot;
+    this.holdAtSeconds = Math.min(DEFENSE_PAUSE_AT_SECONDS[slot], action.getClip().duration);
+    this.defenseHoldStartedAt = performance.now();
     return true;
   }
 
   releaseHeld(): void {
     if (this.koLocked) return;
+    const wasHeld = this.currentAction === this.heldAction;
     this.heldAction = null;
-    if (!this.isActionPlaying) this.playIdle();
+    this.heldSlot = null;
+    this.holdAtSeconds = null;
+    if (wasHeld) {
+      this.isActionPlaying = false;
+      this.playIdle();
+    }
   }
 
-  /** Terminal. Plays KO once when that clip exists, and ignores later combat clips. */
   playKo(): void {
     if (this.koLocked) return;
     this.koLocked = true;
-    this.clearTimeout();
+    this.clearActionTimeout();
+    this.clearIdleStepTimer();
     this.heldAction = null;
-    const action = this.findAction(CANDIDATES.ko);
+    this.heldSlot = null;
+    this.holdAtSeconds = null;
+    const action = this.actions.get(CLIPS.ko);
     if (!action) return;
     this.arm(action, THREE.LoopOnce);
     this.fadeOutOthers(action, this.fadeDuration);
@@ -111,54 +135,85 @@ export class BoxingAnimationController {
     this.isActionPlaying = true;
   }
 
-  /** Clear a finished fight so the next one can idle again. */
   reset(): void {
     this.koLocked = false;
     this.heldAction = null;
+    this.heldSlot = null;
+    this.holdAtSeconds = null;
     this.playIdle();
   }
 
   update(delta: number): void {
     this.mixer.update(delta);
+    if (this.heldAction && performance.now() - this.defenseHoldStartedAt >= MAX_DEFENSE_HOLD_MS) {
+      this.releaseHeld();
+    }
+    if (this.heldAction && this.holdAtSeconds !== null && this.heldAction.time >= this.holdAtSeconds) {
+      this.isActionPlaying = false;
+      this.heldAction.time = this.holdAtSeconds;
+      this.heldAction.paused = true;
+    }
   }
 
   dispose(): void {
-    this.clearTimeout();
+    this.clearActionTimeout();
+    this.clearIdleStepTimer();
     this.mixer.removeEventListener('finished', this.onFinished as never);
     this.mixer.stopAllAction();
   }
 
-  private findAction(candidates: string[]): THREE.AnimationAction | null {
-    for (const name of candidates) {
-      const action = this.actions.get(name) ?? this.actions.get(name.toLowerCase());
-      if (action) return action;
-    }
-    return null;
-  }
-
-  private playOneShot(action: THREE.AnimationAction | null, fadeTime: number): boolean {
+  private playOneShot(action: THREE.AnimationAction | null, fadeTime: number, variation = false): boolean {
     if (this.koLocked || !action) return false;
-    this.clearTimeout();
+    this.clearActionTimeout();
+    this.clearIdleStepTimer();
+    this.heldAction = null;
+    this.heldSlot = null;
+    this.holdAtSeconds = null;
     this.arm(action, THREE.LoopOnce);
     this.fadeOutOthers(action, fadeTime);
     this.currentAction = action;
     this.isActionPlaying = true;
-
+    this.playingVariation = variation;
     const clipDuration = action.getClip().duration;
-    const safetyMs = Math.max(250, (clipDuration > 0 ? clipDuration : 0.67) * 1000 + 100);
+    const safetyMs = Math.max(500, (clipDuration > 0 ? clipDuration : 0.67) * 1000 + 100);
     this.actionTimeout = setTimeout(() => {
-      if (this.isActionPlaying && this.currentAction === action && !this.koLocked) this.returnToRest();
+      if (this.isActionPlaying && this.currentAction === action && !this.koLocked && !this.heldAction) {
+        this.returnToRest();
+      }
     }, safetyMs);
     return true;
   }
 
-  private returnToRest(duration = this.fadeDuration): void {
+  private scheduleIdleStep(): void {
+    this.clearIdleStepTimer();
+    if (!this.idleStepAction || this.koLocked) return;
+    const delay = IDLE_STEP_MIN_MS + Math.random() * (IDLE_STEP_MAX_MS - IDLE_STEP_MIN_MS);
+    this.idleStepTimer = setTimeout(() => {
+      this.idleStepTimer = null;
+      if (this.currentAction !== this.idleAction || this.isActionPlaying || this.heldAction) {
+        this.scheduleIdleStep();
+        return;
+      }
+      this.playOneShot(this.idleStepAction, 0.2, true);
+    }, delay);
+  }
+
+  private returnToRest(): void {
     if (this.koLocked) return;
-    this.clearTimeout();
+    this.clearActionTimeout();
     this.isActionPlaying = false;
-    const next = this.heldAction ?? this.idleAction;
-    if (!next) return;
-    this.startLoop(next, duration);
+    this.playingVariation = false;
+    const next = this.heldAction;
+    const nextSlot = this.heldSlot;
+    if (next) {
+      this.playOneShot(next, this.fadeDuration);
+      this.heldAction = next;
+      this.heldSlot = nextSlot;
+      if (nextSlot) this.holdAtSeconds = Math.min(DEFENSE_PAUSE_AT_SECONDS[nextSlot], next.getClip().duration);
+      this.defenseHoldStartedAt = performance.now();
+      return;
+    }
+    this.playIdle();
   }
 
   private startLoop(action: THREE.AnimationAction, duration: number): void {
@@ -172,6 +227,7 @@ export class BoxingAnimationController {
     action.reset();
     action.stopFading();
     action.enabled = true;
+    action.paused = false;
     action.setEffectiveTimeScale(1);
     action.setEffectiveWeight(1);
     action.setLoop(loop, loop === THREE.LoopOnce ? 1 : Infinity);
@@ -186,10 +242,17 @@ export class BoxingAnimationController {
     }
   }
 
-  private clearTimeout(): void {
+  private clearActionTimeout(): void {
     if (this.actionTimeout) {
       clearTimeout(this.actionTimeout);
       this.actionTimeout = null;
+    }
+  }
+
+  private clearIdleStepTimer(): void {
+    if (this.idleStepTimer) {
+      clearTimeout(this.idleStepTimer);
+      this.idleStepTimer = null;
     }
   }
 }

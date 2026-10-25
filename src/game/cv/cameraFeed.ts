@@ -1,17 +1,21 @@
 // Small webcam preview for camera input, so the player can see whether they're in frame.
 // The video comes from the browser (getUserMedia) and never leaves the page; the dots are
-// the CV bridge's head/wrist markers, so they show what the classifier actually tracks.
+// the classifier's head/wrist markers, so they show what it actually tracks. The same
+// video feeds in-browser classification (browserCv.ts).
 
 import type { Guard } from './contract';
+import type { VideoSource } from './browserCv';
 import type { CameraMarkers } from './guard';
 
 const W = 240;
 const H = 180;
 const STALE_MS = 500;
 
-export class CameraFeed {
+export class CameraFeed implements VideoSource {
   readonly root = document.createElement('div');
-  private video = document.createElement('video');
+  private videoEl = document.createElement('video');
+  private failure: string | null = null;
+  private testVideo = false;
   private canvas = document.createElement('canvas');
   private ctx = this.canvas.getContext('2d')!;
   private stream: MediaStream | null = null;
@@ -23,11 +27,11 @@ export class CameraFeed {
 
   constructor(parent: HTMLElement) {
     this.root.className = 'camera-feed';
-    this.video.muted = true;
-    this.video.playsInline = true;
+    this.videoEl.muted = true;
+    this.videoEl.playsInline = true;
     this.canvas.width = W * 2;
     this.canvas.height = H * 2;
-    this.root.append(this.video, this.canvas);
+    this.root.append(this.videoEl, this.canvas);
     this.root.style.display = 'none';
     parent.appendChild(this.root);
   }
@@ -35,16 +39,38 @@ export class CameraFeed {
   async show() {
     this.root.style.display = 'block';
     if (!this.raf) this.raf = requestAnimationFrame(this.draw);
-    if (this.stream) return;
+    if (this.stream || this.testVideo) return;
+    // `?cvVideo=/clip.mp4` plays a same-origin recording in place of the webcam, for
+    // testing camera input without a camera.
+    const clip = new URLSearchParams(location.search).get('cvVideo');
+    if (clip) {
+      this.testVideo = true;
+      Object.assign(this.videoEl, { src: clip, loop: true });
+      await this.videoEl.play().catch(() => (this.failure = `cannot play ${clip}`));
+      return;
+    }
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
-      this.video.srcObject = this.stream;
-      await this.video.play();
+      this.failure = null;
+      // 640x480 is what the detector was tuned on (cv-mvp's capture default).
+      this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+      this.videoEl.srcObject = this.stream;
+      await this.videoEl.play();
       this.note = '';
-    } catch {
+    } catch (e) {
       // Markers still draw on a dark box, which is enough to tell if you're in frame.
       this.note = 'video blocked · markers only';
+      this.failure = e instanceof DOMException && e.name === 'NotAllowedError'
+        ? 'camera blocked: allow camera access for this site'
+        : 'no camera available';
     }
+  }
+
+  video(): HTMLVideoElement | null {
+    return this.stream || this.testVideo ? this.videoEl : null;
+  }
+
+  error(): string | null {
+    return this.failure ?? (this.videoEl.error ? 'camera video cannot be decoded' : null);
   }
 
   hide() {
@@ -53,7 +79,12 @@ export class CameraFeed {
     this.raf = 0;
     this.stream?.getTracks().forEach(t => t.stop());
     this.stream = null;
-    this.video.srcObject = null;
+    this.videoEl.srcObject = null;
+    if (this.testVideo) {
+      this.videoEl.pause();
+      this.videoEl.removeAttribute('src');
+      this.testVideo = false;
+    }
   }
 
   update(markers: CameraMarkers, guards: Record<'left' | 'right', Guard>) {
