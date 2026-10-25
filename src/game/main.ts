@@ -170,13 +170,13 @@ const hud = new Hud({
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
     hud.showVsScreen(hudState.playerName ?? 'FIGHTER', hudState.profile, () => {
       beforeFight(() => server.startBotMatch());
-    }, renderer);
+    });
   },
   findPvp: () => {
     if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
     hud.showVsScreen(hudState.playerName ?? 'FIGHTER', hudState.profile, () => {
       beforeFight(() => server.joinPvp());
-    }, renderer);
+    });
   },
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),

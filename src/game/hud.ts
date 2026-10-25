@@ -2,7 +2,6 @@ import type { PoseState, TrackingState } from './cv/contract';
 import type { BridgeStatus } from './cv/bridge';
 import type { CalibrationView } from './cv/guard';
 import type { MatchView, ProfileRow, ResultRow } from './net/server';
-import type * as THREE from 'three';
 
 export { type ProfileRow };
 
@@ -426,16 +425,16 @@ export class Hud {
         </div>
         <div class="wss-dialog-body">
           <svg class="wss-diagram-svg" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="3" width="82" height="82" rx="4" fill="#d8d8d8" stroke="#aaa" stroke-width="1.5"/>
-            <circle cx="44" cy="44" r="32" fill="none" stroke="#e06820" stroke-width="1.5" stroke-dasharray="4 3"/>
-            <circle cx="44" cy="41" r="7"  fill="#e06820"/>
-            <circle cx="44" cy="31" r="5"  fill="#e06820"/>
-            <line x1="37" y1="40" x2="23" y2="34" stroke="#e06820" stroke-width="3.5" stroke-linecap="round"/>
-            <line x1="51" y1="40" x2="65" y2="34" stroke="#e06820" stroke-width="3.5" stroke-linecap="round"/>
-            <text x="44" y="11" font-size="9" fill="#c05010" text-anchor="middle" font-weight="900" font-family="Arial">↑</text>
-            <text x="44" y="84" font-size="9" fill="#c05010" text-anchor="middle" font-weight="900" font-family="Arial">↓</text>
-            <text x="9"  y="47" font-size="9" fill="#c05010" text-anchor="middle" font-weight="900" font-family="Arial">←</text>
-            <text x="81" y="47" font-size="9" fill="#c05010" text-anchor="middle" font-weight="900" font-family="Arial">→</text>
+            <rect x="3" y="3" width="82" height="82" rx="4" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+            <circle cx="44" cy="44" r="32" fill="none" stroke="#ff8c42" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <circle cx="44" cy="41" r="7"  fill="#ff8c42"/>
+            <circle cx="44" cy="31" r="5"  fill="#ff8c42"/>
+            <line x1="37" y1="40" x2="23" y2="34" stroke="#ff8c42" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="51" y1="40" x2="65" y2="34" stroke="#ff8c42" stroke-width="3.5" stroke-linecap="round"/>
+            <text x="44" y="11" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">↑</text>
+            <text x="44" y="84" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">↓</text>
+            <text x="9"  y="47" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">←</text>
+            <text x="81" y="47" font-size="9" fill="rgba(255,140,66,0.7)" text-anchor="middle" font-weight="900" font-family="Arial">→</text>
           </svg>
           <div class="wss-dialog-textcol">
             <p class="wss-dialog-title">Before You Play</p>
@@ -468,41 +467,37 @@ export class Hud {
 
   // ── VS screen ────────────────────────────────────────────────────────────
 
-  showVsScreen(playerName: string, profile: ProfileRow | undefined, onDone: () => void, renderer?: THREE.WebGLRenderer) {
+  showVsScreen(playerName: string, profile: ProfileRow | undefined, onDone: () => void) {
     const screen = el('vs-screen');
     const wins   = profile?.wins ?? 0;
     const losses = profile?.losses ?? 0;
+    const initial = (playerName[0] ?? 'P').toUpperCase();
     const initials = playerName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || playerName.slice(0, 2).toUpperCase();
 
     screen.innerHTML = `
       <div class="vs-flash"></div>
-      <div class="vs-spotlight"></div>
       <div class="vs-bg-layer"></div>
       <div class="vs-fighter player-side">
-        <div class="vs-portrait-wrap">
-          <div class="vs-portrait-bg player-bg"></div>
-          <div class="vs-avatar player-initials">${initials}</div>
-        </div>
-        <div class="vs-name-plate">
+        <div class="vs-stage-light"></div>
+        <div class="vs-watermark">${initial}</div>
+        <div class="vs-avatar">${initials}</div>
+        <div class="vs-nameplate">
           <div class="vs-name">${escapeHtml(playerName)}</div>
           <div class="vs-record">${wins}W &nbsp;–&nbsp; ${losses}L</div>
         </div>
-        <div class="vs-corner-label"></div>
       </div>
       <div class="vs-center">
         <div class="vs-text">VS</div>
         <div class="vs-clash-line"></div>
       </div>
       <div class="vs-fighter cpu-side">
-        <div class="vs-portrait-wrap">
-          <div class="vs-portrait-bg cpu-bg"></div>
-          <div class="vs-avatar cpu-initials" id="vs-cpu-avatar">CT</div>
-        </div>
-        <div class="vs-name-plate">
+        <div class="vs-stage-light"></div>
+        <div class="vs-watermark">CT</div>
+        <div class="vs-avatar">CT</div>
+        <div class="vs-nameplate">
           <div class="vs-name">CLAUDE TYSON</div>
           <div class="vs-record">AI BOXER</div>
         </div>
-        <div class="vs-corner-label"></div>
       </div>
       <div class="vs-skip-hint">Click anywhere to skip</div>`;
 
@@ -524,19 +519,6 @@ export class Hud {
 
     // Rumble effect when VS text appears (~400ms mark)
     window.setTimeout(() => this.triggerVsRumble(screen), 420);
-
-    // Async portrait render — swap in when ready
-    if (renderer) {
-      import('./vsPortrait').then(({ renderBotPortrait }) =>
-        renderBotPortrait(renderer)
-      ).then(dataUrl => {
-        if (!dataUrl || screen.style.display === 'none') return;
-        const avatarEl = document.getElementById('vs-cpu-avatar');
-        if (!avatarEl) return;
-        avatarEl.innerHTML = `<img class="vs-portrait-img" src="${dataUrl}" alt="Claude Tyson">`;
-        avatarEl.classList.add('has-portrait');
-      }).catch(() => { /* keep initials fallback */ });
-    }
   }
 
   private triggerVsRumble(screen: HTMLElement) {
