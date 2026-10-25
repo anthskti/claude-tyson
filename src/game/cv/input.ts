@@ -2,12 +2,12 @@
 // control keys the keyboard uses, so the webcam and the keyboard drive one input path
 // and either works when the other is absent.
 //
-//   punch_left  straight → J   hook → U
-//   punch_right straight → K   hook → I
+//   punch_left  straight → J   hook → Q
+//   punch_right straight → C   hook → E
 //   dodge_left → hold A · dodge_right → hold D · return_neutral → release
 //
 // Blocks come from the wrist/head markers in each observation (cv/guard.ts); main.ts
-// turns those into Q/E holds. Sources: the in-browser worker (browserCv.ts) and the
+// turns those into internal guard holds. Sources: the in-browser worker (browserCv.ts) and the
 // Python CV bridge (bridge.ts).
 
 import type { CameraMarkers } from './guard';
@@ -53,8 +53,8 @@ export interface CvHooks {
 const STALE_MS = 500;
 
 const PUNCH_KEY: Record<string, { straight: string; hook: string }> = {
-  punch_left: { straight: 'j', hook: 'u' },
-  punch_right: { straight: 'k', hook: 'i' },
+  punch_left: { straight: 'j', hook: 'q' },
+  punch_right: { straight: 'c', hook: 'e' },
 };
 const DODGE_KEY: Record<string, string> = { dodge_left: 'a', dodge_right: 'd' };
 
