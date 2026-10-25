@@ -12,18 +12,19 @@ import type {
 // Keyboard stand-in for the real CV provider. Emits contract-shaped observations at
 // ~30 Hz and discrete MotionEvents, so the rest of the game can't tell the difference.
 //
-//   Body (hold)    A slip left · D slip right
-//   Guard (hold)   Q left block · E right block · W both
-//   Left fist      J left straight · U left hook
-//   Right fist     K right straight · I right hook
-//   T toggle tracking lost · C recalibrate
+//   Body (hold)    A dodge left · D dodge right
+//   Guard (hold)   B both gloves
+//   Left fist      J left straight · Q left hook
+//   Right fist     C right straight · E right hook
+//   T toggle tracking lost · X recalibrate
 
 export const SIM_KEYS: Record<string, { hand: 'left' | 'right'; type: PunchType }> = {
   j: { hand: 'left', type: 'left_straight' },
-  u: { hand: 'left', type: 'left_hook' },
-  k: { hand: 'right', type: 'right_straight' },
-  i: { hand: 'right', type: 'right_hook' },
+  c: { hand: 'right', type: 'right_straight' },
+  q: { hand: 'left', type: 'left_hook' },
+  e: { hand: 'right', type: 'right_hook' },
 };
+const CV_GUARD_KEYS = { left: 'cv_guard_left', right: 'cv_guard_right' } as const;
 
 const SAMPLE_HZ = 30;
 const SLIP_TARGET = 0.6; // body widths
@@ -82,7 +83,7 @@ export class SimulatedCvProvider implements CvProvider {
     const punch = SIM_KEYS[k];
     if (punch) this.punch(punch.hand, punch.type);
     if (k === 't') this.trackingLost = !this.trackingLost;
-    if (k === 'c') this.recalibrate();
+    if (k === 'x') this.recalibrate();
   }
 
   release(key: string) {
@@ -124,7 +125,7 @@ export class SimulatedCvProvider implements CvProvider {
 
   private guard(hand: 'left' | 'right', now: number): Guard {
     if (this.punchUntil[hand] > now) return 'neutral'; // punching drops that guard
-    return this.held.has('w') || this.held.has(hand === 'left' ? 'q' : 'e') ? 'block' : 'neutral';
+    return this.held.has('b') || this.held.has(CV_GUARD_KEYS[hand]) ? 'block' : 'neutral';
   }
 
   private step(now: number, dt: number) {
