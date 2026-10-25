@@ -1,0 +1,108 @@
+{
+  "contractVersion": 1,
+  "kind": "cv_sample",
+  "fightId": "integration-test",
+  "roundId": "round-1",
+  "seq": 39,
+  "source": "synthetic",
+  "observation": {
+    "schemaVersion": 1,
+    "kind": "observation",
+    "sessionId": "2a617f348590",
+    "timestampMs": 1267,
+    "availableMs": 1267,
+    "trackingState": "good",
+    "validity": {
+      "dodge": true,
+      "punch_left": true,
+      "punch_right": true
+    },
+    "calibrationId": "2a617f348590-head-1",
+    "markers": {
+      "head": {
+        "x": 0.5,
+        "y": 0.25
+      },
+      "left": {
+        "x": 0.6098,
+        "y": 0.44183510848047797
+      },
+      "right": {
+        "x": 0.35,
+        "y": 0.43200000000000005
+      }
+    },
+    "features": {
+      "left": {
+        "growthRate": 2.0769660720029575,
+        "movementSpeed": 0.29457132661623203
+      },
+      "right": {
+        "growthRate": 0.0,
+        "movementSpeed": 0.0
+      },
+      "lateralDisplacementBodyWidths": 0.0
+    },
+    "qualityScore": null,
+    "qualityKind": "not_estimated",
+    "confidence": null,
+    "reason": null,
+    "phases": {
+      "dodge": "ready",
+      "left": "latched",
+      "right": "ready"
+    },
+    "punchReadiness": {
+      "left": "latched",
+      "right": "ready"
+    },
+    "dodgeReadiness": {
+      "state": "ready",
+      "reason": "Head reference available"
+    }
+  },
+  "events": [
+    {
+      "schemaVersion": 1,
+      "eventId": "2a617f348590-000001",
+      "sessionId": "2a617f348590",
+      "type": "punch_left",
+      "onsetMs": 1133,
+      "sampleMs": 1267,
+      "detectedMs": 1267,
+      "sideConvention": "player_anatomical",
+      "trackingState": "good",
+      "qualityScore": null,
+      "qualityKind": "not_estimated",
+      "features": {
+        "rule": "recent_hand_motion",
+        "growthRate": 2.0769660720029575,
+        "movementSpeed": 0.29457132661623203,
+        "windowSpanMs": 134,
+        "handednessScore": 0.99
+      },
+      "calibrationId": null,
+      "experimental": true,
+      "confidence": null,
+      "resetGeneration": 0
+    }
+  ],
+  "trace": {
+    "clock": "producer_monotonic_ms",
+    "inputKind": "synthetic",
+    "detectionEndMs": 6.69049983844161,
+    "liveLatencyMeasurable": false,
+    "sentMs": 6.690958980470896
+  },
+  "producer": {
+    "detector": "recent_hand_motion",
+    "nativeSchemaVersion": 2,
+    "resetGeneration": 0,
+    "coordinateSpace": "canonical_unmirrored_image"
+  },
+  "batch": {
+    "firstSeq": 39,
+    "lastSeq": 39,
+    "coalescedObservations": 0
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "source": "current adaptive-boxing-cv/boxing_cv",
+  "date": "2026-10-23",
+  "detector": "recent_hand_motion",
+  "schemaVersion": 2,
+  "sha256": {
+    "__init__.py": "10c7afa92a556c356057ef12dbc65c91ad2a8f215d6f12cb52a760b4a442bc6a",
+    "config.py": "e8948ce173946fe00d6e3c010e8dc7cafd0bd7ea3ee5afd45d197512afa0089f",
+    "detector.py": "c0f1efa05a46ffdd7f8681df1c6f4fe6118b8d748cdd6ccd92aece35439332a8",
+    "features.py": "0558028565b7d644021640640a7a93054dd6fa44b4279db276ac17aae869a0ba",
+    "capture.py": "e6c5820b024cc4661ffdcf0d88dfb1dd30999314563668d7bdae1dddab8aecc0",
+    "inference.py": "ecdbd01ac921f2710d908048039149887e4008f1f3ed5c6c6b975484349e89bc"
+  },
+  "defaultProfile": "unchanged harness default; tuned profile opt-in"
+}
