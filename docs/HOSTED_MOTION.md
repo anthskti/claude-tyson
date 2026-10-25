@@ -61,4 +61,4 @@ motion/.venv/bin/python -m pytest -q motion/tests
 bun run build
 ```
 
-The original main commit has duplicate declarations in the backend's `spacetimedb/src/module.test.ts`. They are unrelated to this integration; no backend gameplay code is changed here.
+No backend gameplay changes are introduced by this integration. The branch includes the latest main updates, including the backend test fixes.

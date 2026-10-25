@@ -148,8 +148,8 @@ export class SimulatedCvProvider implements CvProvider {
   };
 
   private recalibrate() {
-    this.calibrationId = null;
-    this.calibratingUntil = this.now() + CALIBRATION_MS;
+    this.calibrationId = `cal-${Math.random().toString(36).slice(2, 8)}`;
+    this.calibratingUntil = 0;
     this.lateral = 0;
     this.dodgeSide = null;
   }

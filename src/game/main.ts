@@ -13,6 +13,21 @@ import { poseOf, type Body, type CvProvider, type MotionEvent, type Guard, type 
 import { ANSWER, DEFENSE_TEXT, OFFENSE_TEXT, PUNCH_NAME } from './combatText';
 import { GameServer, type MatchView, type RingView } from './net/server';
 import { Hud, type HudState, type InputMode, type RingSummary } from './hud';
+import { MahoragasWheel } from './scene/mahoragasWheel';
+import { CornerScene } from './cornerScene';
+import { AdaptationManager } from './adaptationManager';
+import { DebugLog } from './debugLog';
+import { FriendsPanel } from './friendsPanel';
+import { pickLine } from './dialogue';
+import { renderBotPortrait } from './vsPortrait';
+
+const PLAYER_NAME_KEY = 'claude-tyson.player-name';
+function loadPlayerName(): string | null {
+  try { return localStorage.getItem(PLAYER_NAME_KEY); } catch { return null; }
+}
+function savePlayerName(name: string) {
+  try { localStorage.setItem(PLAYER_NAME_KEY, name); } catch {}
+}
 
 /** Mounts the fight on `#scene` and `#hud`. Call after those elements exist. */
 export function startGame(): () => void {
@@ -38,6 +53,8 @@ loadRing().then(ring => {
 });
 const arena = new Arena();
 scene.add(arena.root);
+const wheel = new MahoragasWheel();
+scene.add(wheel.group);
 
 // First-person: the player stands just south of centre, facing the opponent (-Z).
 const EYE = new THREE.Vector3(0, 1.62, 0.55);
@@ -54,15 +71,90 @@ camera.add(gloves.root);
 const opponent = new Boxer();
 firstPerson.add(opponent.root);
 
-// Spectator camera: a slow orbit outside the ropes of the watched ring.
-const ORBIT_RADIUS_M = 9.5;
-const ORBIT_HEIGHT_M = 5;
-const ORBIT_RAD_PER_S = 0.12;
-let orbitAngle = 0.6;
+// ─── Cinematic home-screen camera ──────────────────────────────────────────
+// Multi-shot sequence: each shot slowly drifts between two positions,
+// then cross-fades to the next. Rings sit in a 2×2 grid; when focus=ring0
+// they occupy (0,0,0), (16,0,0), (0,0,16), (16,0,16).
+interface CinematicShot {
+  startPos: THREE.Vector3;
+  endPos:   THREE.Vector3;
+  lookAt:   THREE.Vector3;
+  fov:      number;
+  duration: number; // seconds
+}
+const CINEMATIC_SHOTS: CinematicShot[] = [
+  // 1 – Epic overhead: all four rings visible
+  { startPos: new THREE.Vector3(8, 28, 20), endPos: new THREE.Vector3(8, 22, 12),
+    lookAt: new THREE.Vector3(8, 0, 8), fov: 52, duration: 10 },
+  // 2 – Ringside low: looking up into ring 0
+  { startPos: new THREE.Vector3(-3, 2.2, -8), endPos: new THREE.Vector3(0, 1.8, -4),
+    lookAt: new THREE.Vector3(0, 1.6, 0), fov: 68, duration: 8 },
+  // 3 – Far corner diagonal: ring 3 (16,0,16) and beyond
+  { startPos: new THREE.Vector3(26, 7, 26), endPos: new THREE.Vector3(22, 5.5, 22),
+    lookAt: new THREE.Vector3(8, 0, 8), fov: 60, duration: 9 },
+  // 4 – Side tracking past ring 1 (16,0,0)
+  { startPos: new THREE.Vector3(24, 4, -10), endPos: new THREE.Vector3(24, 3.5, 6),
+    lookAt: new THREE.Vector3(16, 1.2, 0), fov: 62, duration: 8 },
+  // 5 – Inside-the-action: low angle between rings 0 and 2
+  { startPos: new THREE.Vector3(-4, 1.6, 4), endPos: new THREE.Vector3(-2, 2.4, 10),
+    lookAt: new THREE.Vector3(4, 1.4, 8), fov: 72, duration: 9 },
+];
+const CINEMATIC_BLEND_S = 1.2; // cross-fade duration
+let cinShotIdx = 0;
+let cinShotT = 0;   // progress within current shot [0..1]
+let cinBlendT = -1; // ≥0 while blending out (-1 = not blending)
+const cinCamA = new THREE.PerspectiveCamera(60, 1, 0.03, 150);
+const cinCamB = new THREE.PerspectiveCamera(60, 1, 0.03, 150);
+const cinTarget = document.createElement('canvas'); // off-screen target for blend
+cinTarget.style.display = 'none';
+
+function cinStep(dt: number) {
+  const shot = CINEMATIC_SHOTS[cinShotIdx];
+  cinShotT = Math.min(1, cinShotT + dt / shot.duration);
+
+  // Ease: slow in + slow out (smoothstep)
+  const ease = cinShotT * cinShotT * (3 - 2 * cinShotT);
+  const pos = new THREE.Vector3().lerpVectors(shot.startPos, shot.endPos, ease);
+  camera.position.copy(pos);
+  camera.lookAt(shot.lookAt);
+  camera.fov = shot.fov;
+  camera.updateProjectionMatrix();
+
+  if (cinShotT >= 1) {
+    cinShotIdx = (cinShotIdx + 1) % CINEMATIC_SHOTS.length;
+    cinShotT = 0;
+  }
+}
+
+// Ring centers: 2×2 grid, SPACING_M=16, centred at origin.
+// gridPosition(ring) = ((col-0.5)*16, 0, (row-0.5)*16)
+const RING_CENTERS = [
+  new THREE.Vector3(-8, 0, -8), // Ring 0
+  new THREE.Vector3( 8, 0, -8), // Ring 1
+  new THREE.Vector3(-8, 0,  8), // Ring 2
+  new THREE.Vector3( 8, 0,  8), // Ring 3
+];
+let spectateAngle = 0; // slow orbit around watched ring
+
+function spectateStep(dt: number, ringIdx: number) {
+  spectateAngle = (spectateAngle + dt * 0.15) % (Math.PI * 2); // ~42 s per orbit
+  const center = RING_CENTERS[ringIdx] ?? RING_CENTERS[0];
+  const radius = 11;
+  const height = 3.8;
+  camera.position.set(
+    center.x + Math.sin(spectateAngle) * radius,
+    height,
+    center.z + Math.cos(spectateAngle) * radius,
+  );
+  camera.lookAt(center.x, 1.5, center.z);
+  camera.fov = 62;
+  camera.updateProjectionMatrix();
+}
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -85,9 +177,15 @@ function savedInput(): InputMode {
 const hudState: HudState = {
   server: 'connecting', tracking: 'calibrating', queued: false, input: savedInput(), camera: 'off',
   rings: [], queueLength: 0, spectating: false, watch: 0, names: ['YOU', 'OPPONENT'],
+  playerName: loadPlayerName() ?? undefined,
 };
 let view: MatchView | undefined;
 let rings: RingView[] = [];
+let cinematicMode = false;
+let debriefShown = false;
+let debriefTimer = 0;
+let prevMatchId: string | undefined;
+let prevMatchStatus: string | undefined;
 // Set by a ring picked in the menu or the spectator bar; otherwise the busiest ring is shown.
 let pickedRing: number | undefined;
 // Server updates from every ring land many times a second; redraw the HUD once per frame.
@@ -107,6 +205,12 @@ const server = new GameServer({
   },
   onChange: markDirty,
   onError: message => hud.toast(message, 'bad'),
+  onFightWindow(fw, strategy) {
+    adaptationManager.onWindow(fw, strategy);
+    const att = fw.playerJabs + fw.playerStraights + fw.playerHooks +
+      fw.playerUppercuts + ((fw as any).playerUnclassified || 0);
+    debugLog.add('window', `W#${fw.id} +${fw.playerLanded}/${att} bot${fw.botHealth}hp trk=${(fw.trackingCoverage * 100).toFixed(0)}%`);
+  },
   onRingAttack: atk => arena.attack(atk),
   onRingAttackResolved: atk => arena.resolved(atk),
   onAttack(atk, v) {
@@ -124,7 +228,10 @@ const server = new GameServer({
     if (atk.result === 'cancelled') return;
     if (atk.attackerSlot === v.me.slot) {
       if (v.match.mode === 'bot') opponent.showDefense(atk.defenderBody as Body, atk.defenderGuard);
-      if (atk.result === 'landed') opponent.takeHit();
+      if (atk.result === 'landed') {
+        opponent.takeHit();
+        if (Math.random() < 0.35) hud.showDialogue(pickLine(atk.damage >= 9 ? 'hit_taken_heavy' : 'hit_taken_light'));
+      }
       const text = OFFENSE_TEXT[atk.detail] ?? atk.result;
       hud.toast(atk.damage > 0 ? `${text} −${(atk.damage / 10).toFixed(1)}` : text, atk.damage > 0 ? 'good' : 'info');
       return;
@@ -139,6 +246,7 @@ const server = new GameServer({
       hud.flashDamage();
       shakeUntil = performance.now() + 220;
       hud.toast(`${text} −${(atk.damage / 10).toFixed(1)}`, 'bad');
+      if (Math.random() < 0.28) hud.showDialogue(pickLine('hit_landed'));
     } else {
       hud.toast(atk.result === 'dodged' ? `${text} · counter ready` : text, 'good');
     }
@@ -146,8 +254,20 @@ const server = new GameServer({
 });
 
 const hud = new Hud({
-  fightBot: () => beforeFight(() => server.startBotMatch()),
-  findPvp: () => beforeFight(() => server.joinPvp()),
+  fightBot: () => {
+    if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
+    beforeFight(async () => {
+      const portrait = await renderBotPortrait(renderer);
+      hud.showVsScreen(hudState.playerName ?? 'YOU', portrait, () => server.startBotMatch());
+    });
+  },
+  findPvp: () => {
+    if (hudState.server !== 'online') { hud.toast(`Server ${hudState.server} — run: spacetime start`, 'bad'); return; }
+    beforeFight(async () => {
+      const portrait = await renderBotPortrait(renderer);
+      hud.showVsScreen(hudState.playerName ?? 'YOU', portrait, () => server.joinPvp());
+    });
+  },
   cancelPvp: () => server.leavePvp(),
   forfeit: () => view && server.forfeit(view.match.id),
   useKeyboard: () => setInput('keyboard'),
@@ -168,6 +288,53 @@ const hud = new Hud({
     watch(ring);
     setSpectating(true);
   },
+  changeName: () => {
+    hud.showNameEntry((name) => {
+      savePlayerName(name);
+      hudState.playerName = name;
+      refresh();
+      hud.showWiiSafety(() => refresh());
+    });
+  },
+});
+
+const debugLog = new DebugLog();
+new FriendsPanel((msg, kind) => hud.toast(msg, kind));
+
+const adaptationManager = new AdaptationManager({
+  server,
+  requestStrategist: async (req) => {
+    const res = await fetch('/api/strategist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`strategist ${res.status}`);
+    return res.json();
+  },
+  onStrategyApplied: (explanation) => {
+    wheel.clank();
+    hud.showAdaptedTag(explanation);
+    hud.showDialogue(pickLine('adaptation'));
+    debugLog.add('strategy', `ADAPTED: ${explanation}`);
+  },
+  onAdaptation: (outcome, explanation) => {
+    hud.showAdaptation(outcome, explanation);
+    debugLog.add('outcome', `${outcome === 'improved' ? 'KEPT' : 'REVERSED'}: ${explanation}`);
+  },
+  log: (msg) => { console.log('[adaptation]', msg); debugLog.add('strategy', msg); },
+});
+
+const cornerScene = new CornerScene({
+  scene, camera, renderer,
+  onAnalysis: (text, source) => debugLog.add('analysis', `[${source}] ${text}`),
+  onExit: () => {
+    cinematicMode = false;
+    hudState.cinematic = false;
+    hudState.debriefing = false;
+    wheel.show();
+    refresh();
+  },
 });
 
 function setSpectating(on: boolean) {
@@ -186,7 +353,7 @@ function summarize(r: RingView): RingSummary {
   const m = r.match;
   if (!m) return { ring: r.ring, free: true, label: 'Empty' };
   const [red, blue] = r.fighters;
-  const hp = (f: typeof red) => (f ? Math.max(0, Math.round(f.health / 10)) : 0);
+  const hp = (f: typeof red) => (f ? Math.max(0, Math.round(f.health)) : 0);
   const result = m.status === 'active' ? '' : ' · ended';
   return {
     ring: r.ring,
@@ -224,12 +391,51 @@ function refresh() {
   hudState.watch = watchedRing();
   const watched = rings[hudState.watch];
   hudState.names = isFirstPerson()
-    ? ['YOU', view?.match.mode === 'bot' ? 'BOT' : server.nameOf(view?.opponent)]
+    ? [hudState.playerName ?? 'YOU', view?.match.mode === 'bot' ? 'BOT' : server.nameOf(view?.opponent)]
     : [server.nameOf(watched?.fighters[0]), server.nameOf(watched?.fighters[1])];
   // The Claude-themed bot is PvE only; a PvP opponent is a fighter in their corner colour.
   opponent.setLook(view?.match.mode === 'pvp' ? cornerOf(view.opponent.slot) : 'claude');
   gloves.setCorner(cornerOf(view?.me.slot ?? 0));
   arena.sync(rings);
+
+  const matchId = view ? String(view.match.id) : undefined;
+  const status = view?.match.status;
+
+  if (status === 'active' && matchId !== prevMatchId) {
+    debriefShown = false;
+    window.clearTimeout(debriefTimer);
+    hudState.debriefing = false;
+    cinematicMode = false;
+    hudState.cinematic = false;
+    cornerScene.exit();
+    wheel.show();
+    adaptationManager.reset(BigInt(view!.match.id));
+    hud.showDialogue(pickLine('fight_start'));
+  }
+
+  if (!debriefShown && status !== 'active' && prevMatchStatus === 'active') {
+    debriefShown = true;
+    const won = hudState.result?.winnerSlot === view?.me.slot;
+    const reason = hudState.result?.reason ?? 'time';
+    hud.showDialogue(pickLine(won ? 'fight_end_win' : 'fight_end_lose'));
+    if (view && !cinematicMode) {
+      const stars = won ? (view.me.health >= 70 ? 3 : view.me.health >= 35 ? 2 : 1) : 0;
+      hud.showResultCard(won, reason, stars);
+      hudState.debriefing = true;
+      const snap = view;
+      debriefTimer = window.setTimeout(() => {
+        hudState.debriefing = false;
+        cinematicMode = true;
+        hudState.cinematic = true;
+        wheel.hide();
+        cornerScene.enter(server.conn, snap.match.id, won, reason, wheel.totalClanks, hudState.playerName);
+      }, 2400);
+    }
+  }
+
+  prevMatchId = matchId;
+  prevMatchStatus = status;
+
   hud.render(hudState);
 }
 
@@ -434,7 +640,7 @@ function onInput(obs: Observation, events: MotionEvent[]) {
     if (ev.type === 'punch_left') gloves.punch('left', type);
     if (ev.type === 'punch_right') gloves.punch('right', type);
   }
-  hud.renderPose(myPose);
+  hud.renderPose(myPose, view?.match.status === 'active');
 
   if (hudState.input === 'airpods' && events.length) {
     hudState.lastCv = events.map(e => e.punchType ?? e.type).join(', ');
@@ -451,6 +657,22 @@ setInput(hudState.input);
 server.connect();
 refresh();
 
+// Show name entry on first visit, then Wii safety once per session.
+if (!hudState.playerName) {
+  hud.showNameEntry((name) => {
+    savePlayerName(name);
+    hudState.playerName = name;
+    refresh();
+    if (!sessionStorage.getItem('claude-tyson.safety-shown')) {
+      sessionStorage.setItem('claude-tyson.safety-shown', '1');
+      hud.showWiiSafety(() => refresh());
+    }
+  });
+} else if (!sessionStorage.getItem('claude-tyson.safety-shown')) {
+  sessionStorage.setItem('claude-tyson.safety-shown', '1');
+  hud.showWiiSafety(() => refresh());
+}
+
 // ─── Frame loop ────────────────────────────────────────────────────────────
 
 const clock = new THREE.Clock();
@@ -462,12 +684,16 @@ renderer.setAnimationLoop(() => {
   const fp = isFirstPerson();
   firstPerson.visible = fp;
   gloves.root.visible = fp;
-  arena.setFocus(fp ? view!.match.ring : hudState.watch, fp, fp && view!.me.slot === 1);
+  // During corner scene cinematic, show the ring model (camera has moved away from inside it).
+  const hideRing = fp && !cinematicMode;
+  arena.setFocus(fp ? view!.match.ring : hudState.watch, hideRing, fp && view!.me.slot === 1);
   arena.update(dt, Date.now());
   if (!fp) {
-    orbitAngle += dt * ORBIT_RAD_PER_S;
-    camera.position.set(Math.sin(orbitAngle) * ORBIT_RADIUS_M, ORBIT_HEIGHT_M, Math.cos(orbitAngle) * ORBIT_RADIUS_M);
-    camera.lookAt(0, 1.1, 0);
+    if (hudState.spectating) {
+      spectateStep(dt, hudState.watch);
+    } else {
+      cinStep(dt);
+    }
     hud.tick(watchedView());
     renderer.render(scene, camera);
     if (hudState.input === 'airpods') airpods.frameRendered(false);
@@ -499,12 +725,24 @@ renderer.setAnimationLoop(() => {
   if (view && view.opponent.health <= 0) opponent.knockout();
   else opponent.standUp();
 
+  // Hide opponent during corner scene cinematic.
+  opponent.root.visible = !cinematicMode;
+
   opponent.update(dt, Date.now());
   gloves.update(dt);
+  wheel.update(dt);
+
+  if (cinematicMode) {
+    cornerScene.update(dt);
+  }
+
   hud.tick(view);
   renderer.render(scene, camera);
   if (hudState.input === 'airpods') airpods.frameRendered();
 });
+
+// Backtick toggles AI transparency log
+window.addEventListener('keydown', (e) => { if (e.key === '`') debugLog.toggle(); });
 
 return () => {
   alive = false;
@@ -513,6 +751,7 @@ return () => {
   clearTimeout(cameraStartTimer);
   cameraInput.stop();
   feed.hide();
+  cornerScene.exit();
   cv.stop();
   server.close();
   hud.dispose();

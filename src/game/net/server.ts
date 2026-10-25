@@ -20,6 +20,7 @@ export type MatchRow = ReturnType<Conn['db']['fightMatch']['iter']> extends Iter
 export type StrategyRow = ReturnType<Conn['db']['botStrategy']['iter']> extends Iterable<infer R> ? R : never;
 export type ResultRow = ReturnType<Conn['db']['fightResult']['iter']> extends Iterable<infer R> ? R : never;
 export type ProfileRow = ReturnType<Conn['db']['fighterProfile']['iter']> extends Iterable<infer R> ? R : never;
+export type FightWindowRow = ReturnType<Conn['db']['fightWindow']['iter']> extends Iterable<infer R> ? R : never;
 
 export interface MatchView {
   match: MatchRow;
@@ -44,6 +45,7 @@ export interface ServerEvents {
   onRingAttackResolved(attack: AttackRow): void;
   onError(message: string): void;
   onChange(): void;
+  onFightWindow?: (window: FightWindowRow, strategy: StrategyRow | undefined) => void;
 }
 
 export function tokenKey(): string {
@@ -90,6 +92,7 @@ export class GameServer {
       .withUri(URI)
       .withDatabaseName(DB_NAME)
       .withToken(readToken())
+      .withCompression('none')
       .onConnect((conn, identity, token) => {
         this.conn = conn;
         this.identity = identity;
@@ -113,6 +116,7 @@ export class GameServer {
             live.rightSemijoin(tables.fighter, (m, f) => m.id.eq(f.matchId)),
             live.rightSemijoin(tables.attack, (m, a) => m.id.eq(a.matchId)),
             live.rightSemijoin(tables.botStrategy, (m, s) => m.id.eq(s.matchId)),
+            live.rightSemijoin(tables.fightWindow, (m, w) => m.id.eq(w.matchId)),
             shows,
             shows.rightSemijoin(tables.fighter, (m, f) => m.id.eq(f.matchId)),
             shows.rightSemijoin(tables.fightResult, (m, r) => m.id.eq(r.matchId)),
@@ -145,6 +149,11 @@ export class GameServer {
     conn.db.fighterProfile.onUpdate(changed);
     conn.db.fighterProfile.onInsert(changed);
 
+    conn.db.fightWindow.onInsert((_ctx, row) => {
+      const strategy = this.conn?.db.botStrategy.matchId.find(row.matchId) ?? undefined;
+      this.events.onFightWindow?.(row, strategy);
+    });
+
     conn.db.attack.onInsert((_ctx, atk) => {
       this.events.onRingAttack(atk);
       const view = this.matchView(atk.matchId);
@@ -170,6 +179,7 @@ export class GameServer {
         tables.attack.where(a => a.matchId.eq(matchId)),
         tables.botStrategy.where(s => s.matchId.eq(matchId)),
         tables.fightResult.where(r => r.matchId.eq(matchId)),
+        tables.fightWindow.where(w => w.matchId.eq(matchId)),
       ]);
     this.mine = { matchId, handle };
   }
@@ -257,6 +267,42 @@ export class GameServer {
 
   forfeit(matchId: bigint) {
     this.conn?.reducers.forfeit({ matchId }).catch(this.report);
+  }
+
+  applyStrategyUpdate(
+    matchId: bigint,
+    sourceWindowId: bigint,
+    baseRevision: number,
+    fields: {
+      aggression: number;
+      punchIntervalMs: number;
+      jabWeight: number;
+      straightWeight: number;
+      hookWeight: number;
+      uppercutWeight: number;
+      leftBias: number;
+      defenseRate: number;
+      telegraphMs: number;
+      explanation: string;
+    }
+  ) {
+    this.conn?.reducers
+      .applyStrategyUpdate({
+        matchId,
+        sourceWindowId,
+        baseRevision,
+        aggression: fields.aggression,
+        punchIntervalMs: fields.punchIntervalMs,
+        jabWeight: fields.jabWeight,
+        straightWeight: fields.straightWeight,
+        hookWeight: fields.hookWeight,
+        uppercutWeight: fields.uppercutWeight,
+        leftBias: fields.leftBias,
+        defenseRate: fields.defenseRate,
+        telegraphMs: fields.telegraphMs,
+        explanation: fields.explanation,
+      })
+      .catch(this.report);
   }
 
   /** Forward one CV sample. Pose is throttled; events are never dropped or merged. */
