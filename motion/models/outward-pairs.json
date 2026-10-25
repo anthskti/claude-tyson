@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "mode": "airpod-stateful-outward",
+  "selection": "Independent earbud and anatomical hand; one model per input stream, both in the separate dual runner",
+  "models": [
+    {
+      "earbud": "left",
+      "punchingHand": "left",
+      "bundle": "airpod-left-outward-v1",
+      "weightsSha256": "bfe98d1f69f3b91260e855a06bf1a57773364cb691c8e7a1a83ad99403a0f3fa",
+      "datasetFingerprint": "7ad64ffc6c8b23a15eb38400e22c9c16aedc82579540c82ed59d014eadf6e749"
+    },
+    {
+      "earbud": "right",
+      "punchingHand": "right",
+      "bundle": "airpod-right-outward-v1",
+      "weightsSha256": "7966be091a3074b415c56c0447fbf587973c09162a8385893966652dcb562a25",
+      "datasetFingerprint": "e99ae175b65a1222c4f3a4a9c1f290f7c1eaa55fc9a47d71894d59893d9040bd"
+    }
+  ]
+}

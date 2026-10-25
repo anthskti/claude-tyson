@@ -1,0 +1,96 @@
+{
+  "sourceRun": "/Users/hanigherwi/Documents/claudetyson/motion/runs/demo-20261025-015432/usb/inference",
+  "scope": "Emitted punch events only, not all predictions or physical onset",
+  "hands": {
+    "left": {
+      "receiptToEventMs": {
+        "n": 172,
+        "median": 10.5345458984375,
+        "p95": 21.81982421875,
+        "max": 40.511474609375
+      },
+      "confirmationToEventMs": {
+        "n": 172,
+        "median": 36.22900390625,
+        "p95": 62.092529296875,
+        "max": 91.415771484375
+      },
+      "estimatedPhoneCallbackToEventMs": null,
+      "modelExecutionMs": {
+        "n": 172,
+        "median": 5.947395460680127,
+        "p95": 16.895500011742115,
+        "max": 35.993832629173994
+      },
+      "sensorAgeMs": {
+        "n": 172,
+        "median": 3.8179931640625,
+        "p95": 6.9140625,
+        "max": 12.0439453125
+      },
+      "gapMs": {
+        "n": 172,
+        "median": 39.902437686920166,
+        "p95": 39.90654134750366,
+        "max": 39.96083307266235
+      },
+      "bufferSamples": {
+        "n": 172,
+        "median": 42.0,
+        "p95": 49,
+        "max": 51
+      },
+      "usbRelayMs": null
+    },
+    "right": {
+      "receiptToEventMs": {
+        "n": 253,
+        "median": 16.347412109375,
+        "p95": 41.162353515625,
+        "max": 60.195068359375
+      },
+      "confirmationToEventMs": {
+        "n": 253,
+        "median": 17.43017578125,
+        "p95": 48.452392578125,
+        "max": 90.510498046875
+      },
+      "estimatedPhoneCallbackToEventMs": {
+        "n": 253,
+        "median": 17.656845092773438,
+        "p95": 42.59844493865967,
+        "max": 61.79006862640381
+      },
+      "modelExecutionMs": {
+        "n": 253,
+        "median": 8.372999727725983,
+        "p95": 17.342875245958567,
+        "max": 36.460124887526035
+      },
+      "sensorAgeMs": {
+        "n": 253,
+        "median": 6.995849609375,
+        "p95": 28.01123046875,
+        "max": 48.07861328125
+      },
+      "gapMs": {
+        "n": 253,
+        "median": 20.0,
+        "p95": 20.000000001862645,
+        "max": 20.000000001862645
+      },
+      "bufferSamples": {
+        "n": 253,
+        "median": 78,
+        "p95": 101,
+        "max": 101
+      },
+      "usbRelayMs": {
+        "n": 253,
+        "median": 1.0850410461425781,
+        "p95": 1.913813591003418,
+        "max": 5.984230041503906
+      }
+    }
+  }
+}

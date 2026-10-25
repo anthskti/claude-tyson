@@ -124,3 +124,15 @@ The strategy/schema still carries an `uppercutWeight` field for compatibility, b
 current online bot selects only the four supported straight and hook actions. There is
 no separate `BotBalance`, `PlayerStyle`, or `Analysis` table in the current module; the
 analysis text is stored on `fight_result` and the profile stores aggregate counters.
+
+## Local AirPod demo adapter
+
+On `cv-local-demo`, native motion is a local input provider; the reducers above are unchanged.
+`motion/` publishes contractVersion 1 `cv_sample` packets over loopback. One canonical
+`sessionId` covers pose plus both hand streams; unique native event IDs survive mapping.
+Punch classes are full anatomical names. IMU hand validity is independent of webcam
+wrist visibility; Pose determines dodge validity. AirPod guards are always neutral.
+Locally, `onsetMs` and `qualityScore` may be null (unknown physical onset / uncalibrated
+model confidence); neither is added to reducer arguments. The browser submits only
+classified events and pose state, never raw sensor vectors or landmarks. See
+[the demo contract and setup](docs/CV_LOCAL_DEMO.md).

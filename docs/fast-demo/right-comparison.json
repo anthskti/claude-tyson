@@ -1,0 +1,1648 @@
+{
+  "splits": {
+    "validation": {
+      "original": {
+        "trials": 20,
+        "punchTrials": 16,
+        "negativeTrials": 4,
+        "recall": 1.0,
+        "firstEventAccuracy": 1.0,
+        "negativeFalsePunchRate": 0.0,
+        "extraEventsPerPunchTrial": 0.0,
+        "delayFromOutwardMs": {
+          "p50": 60.140993562428775,
+          "p95": 145.50717643172942
+        },
+        "modelExecutionMs": {
+          "p50": 1.1377092450857162,
+          "p95": 3.040783433243629
+        },
+        "classes": {
+          "straight": {
+            "trials": 8,
+            "detected": 8
+          },
+          "hook": {
+            "trials": 8,
+            "detected": 8
+          }
+        },
+        "outcomes": [
+          {
+            "exampleId": "41b98d31bef2:75",
+            "parentTrialId": "41b98d31bef2:75",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 386.2347997984485,
+            "events": [
+              {
+                "timeMs": 480.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 480.0,
+            "delayFromOutwardMs": 93.76520020155152,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:76",
+            "parentTrialId": "41b98d31bef2:76",
+            "label": "non_punch",
+            "negativeSubtype": "short_flick",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:77",
+            "parentTrialId": "41b98d31bef2:77",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 85.07290135615459,
+            "events": [
+              {
+                "timeMs": 320.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 320.0,
+            "delayFromOutwardMs": 234.9270986438454,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:78",
+            "parentTrialId": "41b98d31bef2:78",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 440.0,
+            "outwardEndpointMs": 910.7296179670818,
+            "events": [
+              {
+                "timeMs": 960.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 960.0,
+            "delayFromOutwardMs": 49.27038203291818,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:79",
+            "parentTrialId": "41b98d31bef2:79",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 698.2685625902361,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": 61.731437409763885,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:80",
+            "parentTrialId": "41b98d31bef2:80",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 709.1398253813684,
+            "events": [
+              {
+                "timeMs": 800.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 800.0,
+            "delayFromOutwardMs": 90.86017461863162,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:81",
+            "parentTrialId": "41b98d31bef2:81",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_side",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:82",
+            "parentTrialId": "41b98d31bef2:82",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 40.0,
+            "outwardEndpointMs": 579.0604450611606,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": 20.939554938839365,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:83",
+            "parentTrialId": "41b98d31bef2:83",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_turn",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:84",
+            "parentTrialId": "41b98d31bef2:84",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 730.943868533142,
+            "events": [
+              {
+                "timeMs": 800.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 800.0,
+            "delayFromOutwardMs": 69.056131466858,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:85",
+            "parentTrialId": "41b98d31bef2:85",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 80.0,
+            "outwardEndpointMs": 559.4107103437793,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": 40.58928965622067,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:86",
+            "parentTrialId": "41b98d31bef2:86",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 785.64357366747,
+            "events": [
+              {
+                "timeMs": 800.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 800.0,
+            "delayFromOutwardMs": 14.356426332529963,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:87",
+            "parentTrialId": "41b98d31bef2:87",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 501.9991235257606,
+            "events": [
+              {
+                "timeMs": 560.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 560.0,
+            "delayFromOutwardMs": 58.00087647423942,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:88",
+            "parentTrialId": "41b98d31bef2:88",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 360.0,
+            "outwardEndpointMs": 818.4273478571433,
+            "events": [
+              {
+                "timeMs": 880.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 880.0,
+            "delayFromOutwardMs": 61.57265214285667,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:89",
+            "parentTrialId": "41b98d31bef2:89",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 675.0766782297545,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": 84.92332177024548,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:90",
+            "parentTrialId": "41b98d31bef2:90",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 400.0,
+            "outwardEndpointMs": 861.2906650179991,
+            "events": [
+              {
+                "timeMs": 920.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 920.0,
+            "delayFromOutwardMs": 58.70933498200088,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:91",
+            "parentTrialId": "41b98d31bef2:91",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 750.8558985754755,
+            "events": [
+              {
+                "timeMs": 800.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 800.0,
+            "delayFromOutwardMs": 49.14410142452448,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:92",
+            "parentTrialId": "41b98d31bef2:92",
+            "label": "non_punch",
+            "negativeSubtype": "wrist_twist",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:93",
+            "parentTrialId": "41b98d31bef2:93",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 400.0,
+            "outwardEndpointMs": 986.983224740751,
+            "events": [
+              {
+                "timeMs": 1040.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 1040.0,
+            "delayFromOutwardMs": 53.016775259249016,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:94",
+            "parentTrialId": "41b98d31bef2:94",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 604.2994643056426,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": 115.70053569435743,
+            "extraEvents": 0
+          }
+        ]
+      },
+      "fast": {
+        "trials": 20,
+        "punchTrials": 16,
+        "negativeTrials": 4,
+        "recall": 1.0,
+        "firstEventAccuracy": 1.0,
+        "negativeFalsePunchRate": 0.5,
+        "extraEventsPerPunchTrial": 0.0,
+        "delayFromOutwardMs": {
+          "p50": -112.90314809841817,
+          "p95": -0.9443251878750054
+        },
+        "modelExecutionMs": {
+          "p50": 1.343041192740202,
+          "p95": 4.794603493064642
+        },
+        "classes": {
+          "straight": {
+            "trials": 8,
+            "detected": 8
+          },
+          "hook": {
+            "trials": 8,
+            "detected": 8
+          }
+        },
+        "outcomes": [
+          {
+            "exampleId": "41b98d31bef2:75",
+            "parentTrialId": "41b98d31bef2:75",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 386.2347997984485,
+            "events": [
+              {
+                "timeMs": 360.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 360.0,
+            "delayFromOutwardMs": -26.234799798448478,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:76",
+            "parentTrialId": "41b98d31bef2:76",
+            "label": "non_punch",
+            "negativeSubtype": "short_flick",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:77",
+            "parentTrialId": "41b98d31bef2:77",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 85.07290135615459,
+            "events": [
+              {
+                "timeMs": 160.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 160.0,
+            "delayFromOutwardMs": 74.92709864384541,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:78",
+            "parentTrialId": "41b98d31bef2:78",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 440.0,
+            "outwardEndpointMs": 910.7296179670818,
+            "events": [
+              {
+                "timeMs": 800.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 800.0,
+            "delayFromOutwardMs": -110.72961796708182,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:79",
+            "parentTrialId": "41b98d31bef2:79",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 698.2685625902361,
+            "events": [
+              {
+                "timeMs": 560.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 560.0,
+            "delayFromOutwardMs": -138.26856259023612,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:80",
+            "parentTrialId": "41b98d31bef2:80",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 709.1398253813684,
+            "events": [
+              {
+                "timeMs": 640.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 640.0,
+            "delayFromOutwardMs": -69.13982538136838,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:81",
+            "parentTrialId": "41b98d31bef2:81",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_side",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:82",
+            "parentTrialId": "41b98d31bef2:82",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 40.0,
+            "outwardEndpointMs": 579.0604450611606,
+            "events": [
+              {
+                "timeMs": 440.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 440.0,
+            "delayFromOutwardMs": -139.06044506116064,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:83",
+            "parentTrialId": "41b98d31bef2:83",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_turn",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "straight"
+              }
+            ],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 1
+          },
+          {
+            "exampleId": "41b98d31bef2:84",
+            "parentTrialId": "41b98d31bef2:84",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 730.943868533142,
+            "events": [
+              {
+                "timeMs": 640.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 640.0,
+            "delayFromOutwardMs": -90.943868533142,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:85",
+            "parentTrialId": "41b98d31bef2:85",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 80.0,
+            "outwardEndpointMs": 559.4107103437793,
+            "events": [
+              {
+                "timeMs": 440.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 440.0,
+            "delayFromOutwardMs": -119.41071034377933,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:86",
+            "parentTrialId": "41b98d31bef2:86",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 785.64357366747,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": -185.64357366747004,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:87",
+            "parentTrialId": "41b98d31bef2:87",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 501.9991235257606,
+            "events": [
+              {
+                "timeMs": 360.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 360.0,
+            "delayFromOutwardMs": -141.99912352576058,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:88",
+            "parentTrialId": "41b98d31bef2:88",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 360.0,
+            "outwardEndpointMs": 818.4273478571433,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": -98.42734785714333,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:89",
+            "parentTrialId": "41b98d31bef2:89",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 675.0766782297545,
+            "events": [
+              {
+                "timeMs": 560.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 560.0,
+            "delayFromOutwardMs": -115.07667822975452,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:90",
+            "parentTrialId": "41b98d31bef2:90",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 400.0,
+            "outwardEndpointMs": 861.2906650179991,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": -101.29066501799912,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:91",
+            "parentTrialId": "41b98d31bef2:91",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 240.0,
+            "outwardEndpointMs": 750.8558985754755,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": -150.85589857547552,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:92",
+            "parentTrialId": "41b98d31bef2:92",
+            "label": "non_punch",
+            "negativeSubtype": "wrist_twist",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [
+              {
+                "timeMs": 880.0,
+                "label": "hook"
+              }
+            ],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 1
+          },
+          {
+            "exampleId": "41b98d31bef2:93",
+            "parentTrialId": "41b98d31bef2:93",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 400.0,
+            "outwardEndpointMs": 986.983224740751,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": -226.98322474075098,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:94",
+            "parentTrialId": "41b98d31bef2:94",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 604.2994643056426,
+            "events": [
+              {
+                "timeMs": 520.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 520.0,
+            "delayFromOutwardMs": -84.29946430564257,
+            "extraEvents": 0
+          }
+        ]
+      },
+      "paired": {
+        "matchedTrials": 16,
+        "positiveMeansFastEarlier": true,
+        "medianEarlierMs": 160.0,
+        "perTrial": [
+          {
+            "exampleId": "41b98d31bef2:75",
+            "earlierMs": 120.0
+          },
+          {
+            "exampleId": "41b98d31bef2:77",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:78",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:79",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:80",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:82",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:84",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:85",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:86",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:87",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:88",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:89",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:90",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:91",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:93",
+            "earlierMs": 280.0
+          },
+          {
+            "exampleId": "41b98d31bef2:94",
+            "earlierMs": 200.0
+          }
+        ]
+      }
+    },
+    "test": {
+      "original": {
+        "trials": 18,
+        "punchTrials": 14,
+        "negativeTrials": 4,
+        "recall": 1.0,
+        "firstEventAccuracy": 1.0,
+        "negativeFalsePunchRate": 0.0,
+        "extraEventsPerPunchTrial": 0.0,
+        "delayFromOutwardMs": {
+          "p50": 82.9475406415132,
+          "p95": 181.17383818003583
+        },
+        "modelExecutionMs": {
+          "p50": 1.3985419645905495,
+          "p95": 3.9402586407959457
+        },
+        "classes": {
+          "straight": {
+            "trials": 7,
+            "detected": 7
+          },
+          "hook": {
+            "trials": 7,
+            "detected": 7
+          }
+        },
+        "outcomes": [
+          {
+            "exampleId": "41b98d31bef2:95",
+            "parentTrialId": "41b98d31bef2:95",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 696.6409903806494,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": 63.35900961935056,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:96",
+            "parentTrialId": "41b98d31bef2:96",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 564.6958368185915,
+            "events": [
+              {
+                "timeMs": 640.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 640.0,
+            "delayFromOutwardMs": 75.30416318140851,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:97",
+            "parentTrialId": "41b98d31bef2:97",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 400.0,
+            "outwardEndpointMs": 852.7161581082426,
+            "events": [
+              {
+                "timeMs": 920.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 920.0,
+            "delayFromOutwardMs": 67.28384189175745,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:98",
+            "parentTrialId": "41b98d31bef2:98",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 754.0842104140291,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": 5.915789585970856,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:99",
+            "parentTrialId": "41b98d31bef2:99",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 716.4369927248505,
+            "events": [
+              {
+                "timeMs": 760.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 760.0,
+            "delayFromOutwardMs": 43.563007275149516,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:100",
+            "parentTrialId": "41b98d31bef2:100",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_turn",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:101",
+            "parentTrialId": "41b98d31bef2:101",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 546.3256605645452,
+            "events": [
+              {
+                "timeMs": 640.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 640.0,
+            "delayFromOutwardMs": 93.67433943545484,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:102",
+            "parentTrialId": "41b98d31bef2:102",
+            "label": "non_punch",
+            "negativeSubtype": "wrist_twist",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:103",
+            "parentTrialId": "41b98d31bef2:103",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 680.8115366460203,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": 39.18846335397973,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:104",
+            "parentTrialId": "41b98d31bef2:104",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 727.9867385979215,
+            "events": [
+              {
+                "timeMs": 920.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 920.0,
+            "delayFromOutwardMs": 192.01326140207846,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:107",
+            "parentTrialId": "41b98d31bef2:107",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 80.0,
+            "outwardEndpointMs": 469.4090818983821,
+            "events": [
+              {
+                "timeMs": 560.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 560.0,
+            "delayFromOutwardMs": 90.59091810161789,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:108",
+            "parentTrialId": "41b98d31bef2:108",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 544.662774324141,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": 175.33722567585903,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:109",
+            "parentTrialId": "41b98d31bef2:109",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 480.0,
+            "outwardEndpointMs": 717.9467064380478,
+            "events": [
+              {
+                "timeMs": 840.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 840.0,
+            "delayFromOutwardMs": 122.05329356195216,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:110",
+            "parentTrialId": "41b98d31bef2:110",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_side",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:111",
+            "parentTrialId": "41b98d31bef2:111",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 558.4365706075305,
+            "events": [
+              {
+                "timeMs": 680.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 680.0,
+            "delayFromOutwardMs": 121.56342939246952,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:112",
+            "parentTrialId": "41b98d31bef2:112",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 360.0,
+            "outwardEndpointMs": 745.7499319584377,
+            "events": [
+              {
+                "timeMs": 800.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 800.0,
+            "delayFromOutwardMs": 54.25006804156226,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:113",
+            "parentTrialId": "41b98d31bef2:113",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 320.0,
+            "outwardEndpointMs": 619.0092525508925,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": 100.99074744910752,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:114",
+            "parentTrialId": "41b98d31bef2:114",
+            "label": "non_punch",
+            "negativeSubtype": "short_flick",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          }
+        ]
+      },
+      "fast": {
+        "trials": 18,
+        "punchTrials": 14,
+        "negativeTrials": 4,
+        "recall": 0.9285714285714286,
+        "firstEventAccuracy": 0.9285714285714286,
+        "negativeFalsePunchRate": 0.75,
+        "extraEventsPerPunchTrial": 0.07142857142857142,
+        "delayFromOutwardMs": {
+          "p50": -84.69583681859149,
+          "p95": -10.584234105754657
+        },
+        "modelExecutionMs": {
+          "p50": 1.0309997014701366,
+          "p95": 2.3366162553429604
+        },
+        "classes": {
+          "straight": {
+            "trials": 7,
+            "detected": 7
+          },
+          "hook": {
+            "trials": 7,
+            "detected": 6
+          }
+        },
+        "outcomes": [
+          {
+            "exampleId": "41b98d31bef2:95",
+            "parentTrialId": "41b98d31bef2:95",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 696.6409903806494,
+            "events": [
+              {
+                "timeMs": 560.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 560.0,
+            "delayFromOutwardMs": -136.64099038064944,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:96",
+            "parentTrialId": "41b98d31bef2:96",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 564.6958368185915,
+            "events": [
+              {
+                "timeMs": 480.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 480.0,
+            "delayFromOutwardMs": -84.69583681859149,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:97",
+            "parentTrialId": "41b98d31bef2:97",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 400.0,
+            "outwardEndpointMs": 852.7161581082426,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": -132.71615810824255,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:98",
+            "parentTrialId": "41b98d31bef2:98",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 754.0842104140291,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": -154.08421041402914,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:99",
+            "parentTrialId": "41b98d31bef2:99",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 716.4369927248505,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": -116.43699272485048,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:100",
+            "parentTrialId": "41b98d31bef2:100",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_turn",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:101",
+            "parentTrialId": "41b98d31bef2:101",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 0.0,
+            "outwardEndpointMs": 546.3256605645452,
+            "events": [
+              {
+                "timeMs": 440.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 440.0,
+            "delayFromOutwardMs": -106.32566056454516,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:102",
+            "parentTrialId": "41b98d31bef2:102",
+            "label": "non_punch",
+            "negativeSubtype": "wrist_twist",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [
+              {
+                "timeMs": 880.0,
+                "label": "hook"
+              }
+            ],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 1
+          },
+          {
+            "exampleId": "41b98d31bef2:103",
+            "parentTrialId": "41b98d31bef2:103",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 680.8115366460203,
+            "events": [
+              {
+                "timeMs": 560.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 560.0,
+            "delayFromOutwardMs": -120.81153664602027,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:104",
+            "parentTrialId": "41b98d31bef2:104",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 160.0,
+            "outwardEndpointMs": 727.9867385979215,
+            "events": [
+              {
+                "timeMs": 680.0,
+                "label": "straight"
+              }
+            ],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 1
+          },
+          {
+            "exampleId": "41b98d31bef2:107",
+            "parentTrialId": "41b98d31bef2:107",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 80.0,
+            "outwardEndpointMs": 469.4090818983821,
+            "events": [
+              {
+                "timeMs": 400.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 400.0,
+            "delayFromOutwardMs": -69.40908189838211,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:108",
+            "parentTrialId": "41b98d31bef2:108",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 544.662774324141,
+            "events": [
+              {
+                "timeMs": 520.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 520.0,
+            "delayFromOutwardMs": -24.66277432414097,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:109",
+            "parentTrialId": "41b98d31bef2:109",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 480.0,
+            "outwardEndpointMs": 717.9467064380478,
+            "events": [
+              {
+                "timeMs": 720.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 720.0,
+            "delayFromOutwardMs": 2.0532935619521595,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:110",
+            "parentTrialId": "41b98d31bef2:110",
+            "label": "non_punch",
+            "negativeSubtype": "dodge_side",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [
+              {
+                "timeMs": 960.0,
+                "label": "straight"
+              }
+            ],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 1
+          },
+          {
+            "exampleId": "41b98d31bef2:111",
+            "parentTrialId": "41b98d31bef2:111",
+            "label": "straight",
+            "negativeSubtype": null,
+            "onsetMs": 280.0,
+            "outwardEndpointMs": 558.4365706075305,
+            "events": [
+              {
+                "timeMs": 480.0,
+                "label": "straight"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 480.0,
+            "delayFromOutwardMs": -78.43657060753048,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:112",
+            "parentTrialId": "41b98d31bef2:112",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 360.0,
+            "outwardEndpointMs": 745.7499319584377,
+            "events": [
+              {
+                "timeMs": 680.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 680.0,
+            "delayFromOutwardMs": -65.74993195843774,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:113",
+            "parentTrialId": "41b98d31bef2:113",
+            "label": "hook",
+            "negativeSubtype": null,
+            "onsetMs": 320.0,
+            "outwardEndpointMs": 619.0092525508925,
+            "events": [
+              {
+                "timeMs": 600.0,
+                "label": "hook"
+              }
+            ],
+            "correct": true,
+            "firstEventCorrect": true,
+            "firstCorrectMs": 600.0,
+            "delayFromOutwardMs": -19.009252550892484,
+            "extraEvents": 0
+          },
+          {
+            "exampleId": "41b98d31bef2:114",
+            "parentTrialId": "41b98d31bef2:114",
+            "label": "non_punch",
+            "negativeSubtype": "short_flick",
+            "onsetMs": null,
+            "outwardEndpointMs": null,
+            "events": [
+              {
+                "timeMs": 520.0,
+                "label": "hook"
+              }
+            ],
+            "correct": false,
+            "firstEventCorrect": false,
+            "firstCorrectMs": null,
+            "delayFromOutwardMs": null,
+            "extraEvents": 1
+          }
+        ]
+      },
+      "paired": {
+        "matchedTrials": 13,
+        "positiveMeansFastEarlier": true,
+        "medianEarlierMs": 160.0,
+        "perTrial": [
+          {
+            "exampleId": "41b98d31bef2:95",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:96",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:97",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:98",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:99",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:101",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:103",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:107",
+            "earlierMs": 160.0
+          },
+          {
+            "exampleId": "41b98d31bef2:108",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:109",
+            "earlierMs": 120.0
+          },
+          {
+            "exampleId": "41b98d31bef2:111",
+            "earlierMs": 200.0
+          },
+          {
+            "exampleId": "41b98d31bef2:112",
+            "earlierMs": 120.0
+          },
+          {
+            "exampleId": "41b98d31bef2:113",
+            "earlierMs": 120.0
+          }
+        ]
+      }
+    }
+  },
+  "limitations": [
+    "Small previously inspected holdouts, not a fresh independent test.",
+    "Timing is relative to automatic forward-turnaround proxy, not physical impact.",
+    "25Hz recorded replay, no USB/browser/render delay; live phone cadence may differ."
+  ]
+}

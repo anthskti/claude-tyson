@@ -32,7 +32,7 @@ export interface Observation {
   calibrationId: string | null;
   markers: { head?: Marker; left?: Marker; right?: Marker };
   features: { lateralDisplacementBodyWidths?: number; [k: string]: unknown };
-  qualityScore: number;
+  qualityScore: number | null;
   reason?: string;
   pose?: PoseState; // proposed extension
 }
@@ -51,12 +51,12 @@ export interface MotionEvent {
   eventId: string;
   sessionId: string;
   type: MotionEventType;
-  onsetMs: number;
+  onsetMs: number | null;
   sampleMs: number;
   detectedMs: number;
   sideConvention: 'player_anatomical';
   trackingState: TrackingState;
-  qualityScore: number;
+  qualityScore: number | null;
   qualityKind: string;
   calibrationId: string | null;
   experimental: boolean;

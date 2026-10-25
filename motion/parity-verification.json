@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-25",
+  "baseCommit": "3c46465eef5c0eb38d02f9a255c10d95242ab9b9",
+  "sourceRun": "podsoutward-5",
+  "purpose": "Numerical extraction parity, not classification accuracy or new right-hand validation. The same saved left-hand input/profile was replayed against both bundles with the explicit model hand.",
+  "comparedFields": [
+    "state",
+    "probabilities",
+    "calibratedChannels",
+    "normalizedChannels",
+    "classification",
+    "consumedSamples",
+    "bufferSamples",
+    "armedAfterDecision",
+    "recovery",
+    "eventClass"
+  ],
+  "results": {
+    "left": {
+      "readings": 3709,
+      "digest": "f94c4982f8961cf5748f92acb8c9668df598e91b2a3a21d78ed4ae8d98d2441a"
+    },
+    "right": {
+      "readings": 3709,
+      "digest": "09741f4189ab3c03218a146cd0fd4c9fc0e1cf3d5d6a0930c99cbaaec6d31ce2"
+    },
+    "pose": {
+      "frames": 4855,
+      "digest": "e252ee1878e50f4f75fc0814f8bc7d0b0cc7802629f3b2cd6fd407757cf680f2"
+    }
+  },
+  "allMatch": true
+}

@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: process.cwd(),
   // The fight scene and contracts live outside the Next.js app directory.
   serverExternalPackages: [],
   // CV runtime and models (scripts/cv-assets.ts): versioned paths, so cache for good.

@@ -9,7 +9,10 @@
     "test": "bun test engine input src/game/cv && cd spacetimedb && npx vitest run",
     "sync": "./sync-engine.sh",
     "arena": "bun dev/server.ts",
-    "build:arena": "bun dev/build-arena.ts"
+    "build:arena": "bun dev/build-arena.ts",
+    "build:demo": "bun scripts/cv-assets.ts && node node_modules/next/dist/bin/next build",
+    "start:demo": "node node_modules/next/dist/bin/next start --port 3001",
+    "test:motion": "cd motion && .venv/bin/python -m pytest -q tests"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.21",
