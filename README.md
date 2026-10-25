@@ -68,7 +68,9 @@ game with `?cvSource=bridge`.
 | `engine/`, `input/` | Pure combat/input utilities used by the standalone arena |
 | `dev/` | Standalone local arena (not the online game) |
 | `cv-mvp/models/` | MediaPipe models, copied into `public/cv/` at build time |
-| `CONTRACTS.md` | Design contract for actions and combat shapes |
+| `AGENTS.md` | Project scope, architecture boundaries, and engineering guidance |
+| `CONTRACTS.md` | Shared design contract for actions and combat shapes |
+| `schema-diagram.md` | Conceptual SpacetimeDB data model and client/server pipeline |
 
 The client may animate immediately, but the server decides accepted actions, damage,
 health, KO and results. The adaptive bot adjusts bounded tactics only, never damage, hit
@@ -77,18 +79,32 @@ outcomes or the winner.
 ## Run locally
 
 Requires [Bun](https://bun.sh) and the [SpacetimeDB CLI](https://spacetimedb.com/install).
+From the repository root, install the frontend dependencies once:
 
 ```sh
 bun install
-spacetime start                                   # terminal 1
-spacetime publish --anonymous --server local --module-path spacetimedb claude-tyson
-bun run dev                                       # terminal 2: http://localhost:3001
 ```
 
-The module bundles only files inside `spacetimedb/`; `spacetimedb/src/rules.ts` is the live
-rule set. Do not run `sync-engine.sh` for now: `engine/rules.ts` is an older design and the
-script would overwrite the server's rules with it. After changing the module schema,
-regenerate the client bindings:
+Start the local SpacetimeDB server in one terminal, then publish the module from the
+repository root in another:
+
+```sh
+spacetime start
+spacetime publish --anonymous --server local --module-path spacetimedb claude-tyson
+```
+
+In a third terminal, start the frontend:
+
+```sh
+bun run dev
+```
+
+This script generates the local CV assets, then runs `next dev` with Bun's `--bun` runtime
+for lower startup and request latency. Open http://localhost:3001. The module bundles
+files inside `spacetimedb/`; `spacetimedb/src/rules.ts` is the live rule set. Do not run
+`sync-engine.sh` for now: `engine/rules.ts` is an older design and the script would
+overwrite the server's rules with it. After changing the module schema, regenerate the
+client bindings:
 
 ```sh
 spacetime generate --lang typescript --out-dir src/game/module_bindings --module-path spacetimedb

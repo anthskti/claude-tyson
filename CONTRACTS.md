@@ -111,6 +111,13 @@ export const COMBAT_RULES = {
   oppositeHookVsDodgeMultiplier: 1.5,
 } as const;
 
+// One-action-at-a-time rule (server time is authoritative): a fighter can only
+// punch, block, or dodge when no other action or recovery lock is active.
+// Discrete punch events received while locked are discarded, not buffered.
+// Block/dodge remain active until released, with a 2s maximum hold; after that
+// the server ends the defense and applies its cooldown. A continuous pose may
+// start a defense only on a later update when its request is still valid.
+
 // Block stops straights and hooks beat block. Either dodge avoids straights and
 // its same-side hook. The opposite-side hook catches the dodge at 1.5x base.
 // Timing values remain provisional and live in spacetimedb/src/rules.ts.

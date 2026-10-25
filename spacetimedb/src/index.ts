@@ -44,8 +44,10 @@ const POSE_FRESH_MS = 250;
 const DODGE_WINDOW_MS = 350;
 const DODGE_STARTUP_MS = 100;
 const BLOCK_STARTUP_MS = 80;
-const BLOCK_MAX_MS = 900;
+const MAX_DEFENSE_HOLD_MS = 2_000;
+const BLOCK_MAX_MS = MAX_DEFENSE_HOLD_MS;
 const BLOCK_COOLDOWN_MS = 300;
+const DODGE_COOLDOWN_MS = 260;
 const WINDOW_MS = 6_000;
 const BOT_PAUSED_RETRY_MS = 500;
 const BOT_COUNTER_DELAY_MS = 250;
@@ -158,7 +160,7 @@ const fighter = table(
     cvSessionId: t.string(),
     calibrationId: t.string(),
     poseAt: t.timestamp(),
-    // A hand that is punching can't block or punch again until it's ready.
+    // Both timestamps lock the fighter until the current punch recovery ends.
     leftReadyAt: t.timestamp(),
     rightReadyAt: t.timestamp(),
     counterUntil: t.timestamp(),
@@ -339,6 +341,35 @@ function msSince(ctx: Ctx, ts: Timestamp): number {
 
 function isPast(ctx: Ctx, ts: Timestamp): boolean {
   return nowMicros(ctx) >= ts.microsSinceUnixEpoch;
+}
+
+function fighterActionReady(ctx: Ctx, f: Fighter): boolean {
+  return isPast(ctx, f.leftReadyAt) && isPast(ctx, f.rightReadyAt)
+    && isPast(ctx, f.blockReadyAt) && isPast(ctx, f.dodgeReadyAt);
+}
+
+function hasGuard(f: Fighter): boolean {
+  return asGuard(f.leftGuard) === 'block' || asGuard(f.rightGuard) === 'block';
+}
+
+/** Server-side safety release for defenses that remain held past the 2s cap. */
+function releaseExpiredDefense(ctx: Ctx, f: Fighter): Fighter {
+  const active = asBody(f.bodyState) !== 'neutral' || hasGuard(f);
+  if (!active || msSince(ctx, f.defenseStartedAt) < MAX_DEFENSE_HOLD_MS) return f;
+  const cooldownMs = hasGuard(f) ? BLOCK_COOLDOWN_MS : DODGE_COOLDOWN_MS;
+  const cooldown = new Timestamp(
+    f.defenseStartedAt.microsSinceUnixEpoch
+      + BigInt(MAX_DEFENSE_HOLD_MS + cooldownMs) * 1000n,
+  );
+  return ctx.db.fighter.id.update({
+    ...f,
+    bodyState: 'neutral',
+    leftGuard: 'neutral',
+    rightGuard: 'neutral',
+    blockReadyAt: cooldown,
+    dodgeReadyAt: cooldown,
+    blockLockedUntilRelease: hasGuard(f),
+  });
 }
 
 /** A block takes both gloves up; one glove alone is not a guard. */
@@ -525,8 +556,9 @@ function throwPunch(
   const readyAt = after(ctx, Math.max(spec.recoveryMs, windupMs + 150));
   ctx.db.fighter.id.update({
     ...attacker,
-    leftReadyAt: hand === 'left' ? readyAt : attacker.leftReadyAt,
-    rightReadyAt: hand === 'right' ? readyAt : attacker.rightReadyAt,
+    // Punches occupy the whole fighter, not just the throwing hand.
+    leftReadyAt: readyAt,
+    rightReadyAt: readyAt,
   });
   const row = ctx.db.attack.insert({
     id: 0n,
@@ -573,9 +605,9 @@ function botDefense(ctx: Ctx, bot: Fighter, strat: Strategy | undefined): Defend
     return { body: 'neutral', blocking: false };
   }
   const d = BOT_DEFENSES[ctx.random.integerInRange(0, BOT_DEFENSES.length - 1)];
-  // Same rule as the player: no slipping while its own punch is out.
+  // The bot follows the same one-action rule as a player.
   const punching = !isPast(ctx, bot.leftReadyAt) || !isPast(ctx, bot.rightReadyAt);
-  if (punching && d.body !== 'neutral') return { body: 'neutral', blocking: false };
+  if (punching) return { body: 'neutral', blocking: false };
   return { body: d.body, blocking: d.blocking };
 }
 
@@ -743,38 +775,73 @@ export const updatePose = spacetimedb.reducer(
       throw new SenderError('invalid tracking state');
     }
     if (!Number.isFinite(args.lateral)) throw new SenderError('invalid lateral input');
-    let me = refreshStamina(ctx, initial);
+    let me = releaseExpiredDefense(ctx, refreshStamina(ctx, initial));
     let bodyState = args.dodgeValid ? asBody(args.bodyState) : 'neutral';
+    let leftGuard = args.punchLeftValid ? asGuard(args.leftGuard) : 'neutral';
+    let rightGuard = args.punchRightValid ? asGuard(args.rightGuard) : 'neutral';
+    const blockReleased = leftGuard === 'neutral' && rightGuard === 'neutral';
     let stamina = me.stamina;
-    if (me.bodyState === 'neutral' && bodyState !== 'neutral') {
-      // No leaning while a punch is still out.
-      const punching = !isPast(ctx, me.leftReadyAt) || !isPast(ctx, me.rightReadyAt);
-      if (punching || !isPast(ctx, me.dodgeReadyAt) || stamina < DODGE_COST) bodyState = 'neutral';
-      else stamina -= DODGE_COST;
+    const wasDodging = asBody(me.bodyState) !== 'neutral';
+    const wasBlocking = hasGuard(me);
+    const punchBusy = !isPast(ctx, me.leftReadyAt) || !isPast(ctx, me.rightReadyAt);
+    let endedDefense = false;
+
+    // A held defense can be released, but cannot turn into another action in-place.
+    if (wasDodging) {
+      if (bodyState === 'neutral') endedDefense = true;
+      else bodyState = asBody(me.bodyState);
+      leftGuard = 'neutral';
+      rightGuard = 'neutral';
+    } else if (wasBlocking) {
+      if (bodyState !== 'neutral') {
+        bodyState = 'neutral';
+        leftGuard = asGuard(me.leftGuard);
+        rightGuard = asGuard(me.rightGuard);
+      } else if (leftGuard === 'neutral' && rightGuard === 'neutral') {
+        endedDefense = true;
+      } else {
+        leftGuard = asGuard(me.leftGuard);
+        rightGuard = asGuard(me.rightGuard);
+      }
     }
-    const canBlock = bodyState === 'neutral' && stamina > 0;
+
+    const startsDodge = !wasDodging && bodyState !== 'neutral';
+    const startsBlock = !wasBlocking && (leftGuard !== 'neutral' || rightGuard !== 'neutral');
+    if (startsDodge || startsBlock) {
+      if (punchBusy || !fighterActionReady(ctx, me) || me.blockLockedUntilRelease || stamina <= 0) {
+        bodyState = 'neutral';
+        leftGuard = 'neutral';
+        rightGuard = 'neutral';
+      } else if (startsDodge) {
+        if (!args.dodgeValid || stamina < DODGE_COST) bodyState = 'neutral';
+        else stamina -= DODGE_COST;
+        leftGuard = 'neutral';
+        rightGuard = 'neutral';
+      }
+    }
+
+    if (endedDefense) {
+      const cooldown = after(ctx, wasBlocking ? BLOCK_COOLDOWN_MS : DODGE_COOLDOWN_MS);
+      me = { ...me, blockReadyAt: cooldown, dodgeReadyAt: cooldown, blockLockedUntilRelease: false };
+    }
+    const defenseStarted = !wasDodging && !wasBlocking
+      && (bodyState !== 'neutral' || leftGuard !== 'neutral' || rightGuard !== 'neutral');
+    const defenseStartedAt = defenseStarted ? ctx.timestamp : me.defenseStartedAt;
+    const canBlock = bodyState === 'neutral' && stamina > 0 && !punchBusy
+      && isPast(ctx, me.blockReadyAt) && !me.blockLockedUntilRelease;
     const good = args.trackingState === 'good' || (args.trackingState === 'degraded' && args.dodgeValid);
-    const defenseChanged = bodyState !== me.bodyState
-      || bothGuards(args.leftGuard, args.rightGuard) !== bothGuards(me.leftGuard, me.rightGuard);
-    const wasBlocking = bothGuards(me.leftGuard, me.rightGuard);
-    const wantsBlock = bodyState === 'neutral' && bothGuards(args.leftGuard, args.rightGuard);
-    const blockExpired = wasBlocking && msSince(ctx, me.defenseStartedAt) >= BLOCK_MAX_MS;
-    const blockLockedUntilRelease = wantsBlock
-      ? me.blockLockedUntilRelease || blockExpired
+    const blockLockedUntilRelease = me.blockLockedUntilRelease
+      ? !blockReleased
       : false;
-    const blockReadyAt = !wantsBlock && (wasBlocking || me.blockLockedUntilRelease)
-      ? after(ctx, BLOCK_COOLDOWN_MS) : me.blockReadyAt;
-    const endedDodge = me.bodyState !== 'neutral' && bodyState === 'neutral';
-    const dodgeReadyAt = endedDodge ? after(ctx, 260) : me.dodgeReadyAt;
-    const defenseStartedAt = defenseChanged ? ctx.timestamp : me.defenseStartedAt;
+    const dodgeReadyAt = me.dodgeReadyAt;
     me = ctx.db.fighter.id.update({
       ...me,
       // Untracked inputs can't defend: an invalid wrist is never a block.
       bodyState,
-      leftGuard: canBlock && !blockExpired && args.punchLeftValid ? asGuard(args.leftGuard) : 'neutral',
-      rightGuard: canBlock && !blockExpired && args.punchRightValid ? asGuard(args.rightGuard) : 'neutral',
+      leftGuard: canBlock ? leftGuard : 'neutral',
+      rightGuard: canBlock ? rightGuard : 'neutral',
       defenseStartedAt,
-      blockReadyAt,
+      blockReadyAt: me.blockReadyAt,
       blockLockedUntilRelease,
       dodgeReadyAt,
       stamina,
@@ -803,7 +870,7 @@ export const submitMotionEvent = spacetimedb.reducer(
   },
   (ctx, { matchId, cvSessionId, eventId, eventType, punchType }) => {
     let { me } = requireMyFighter(ctx, matchId);
-    me = refreshStamina(ctx, me);
+    me = releaseExpiredDefense(ctx, refreshStamina(ctx, me));
     if (!cvSessionId || cvSessionId.length > 128 || !eventId || eventId.length > 128) {
       throw new SenderError('invalid motion event id');
     }
@@ -814,13 +881,15 @@ export const submitMotionEvent = spacetimedb.reducer(
 
     // Events from a previous CV session / calibration must not trigger new hits.
     if (me.cvSessionId && cvSessionId !== me.cvSessionId) return;
+    if (!poseIsUsable(ctx, me)) return;
 
     // Body movement and guards are resolved from continuous pose; only punches start attacks.
     if (eventType !== 'punch_left' && eventType !== 'punch_right') return;
     const hand: Hand = eventType === 'punch_left' ? 'left' : 'right';
     if (hand === 'left' ? !me.punchLeftValid : !me.punchRightValid) return;
     if (asBody(me.bodyState) !== 'neutral') return; // no swinging mid-lean
-    if (!isPast(ctx, hand === 'left' ? me.leftReadyAt : me.rightReadyAt)) return; // hand still busy
+    if (!fighterActionReady(ctx, me)) return; // locked actions are rejected, never buffered
+    if (hasGuard(me)) return; // no punch while blocking
 
     const type = asPunchType(punchType) ?? (hand === 'left' ? 'left_straight' : 'right_straight');
     if ((type.startsWith('left_') ? 'left' : 'right') !== hand) return;
@@ -912,6 +981,14 @@ export const botAct = spacetimedb.reducer(
     // Pause bot offence while the player's tracking is unusable (contract §3).
     if (!poseIsUsable(ctx, human)) {
       scheduleBot(ctx, match.id, BOT_PAUSED_RETRY_MS);
+      return;
+    }
+
+    if (!isPast(ctx, bot.leftReadyAt) || !isPast(ctx, bot.rightReadyAt)) {
+      const readyAt = bot.leftReadyAt.microsSinceUnixEpoch > bot.rightReadyAt.microsSinceUnixEpoch
+        ? bot.leftReadyAt : bot.rightReadyAt;
+      const remainingMs = Number(readyAt.microsSinceUnixEpoch - nowMicros(ctx)) / 1000;
+      scheduleBot(ctx, match.id, Math.max(1, remainingMs));
       return;
     }
 

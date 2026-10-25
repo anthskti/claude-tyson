@@ -3,13 +3,12 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Body, Guard, PunchType } from '../cv/contract';
 import { BoxingAnimationController, type ClipSlot, type HeldSlot } from './animation-controller';
 
-// The opponent is claude_bot.glb. Gameplay still calls the same methods; the
+// The opponent is claude_botv3.glb. Gameplay still calls the same methods; the
 // controller maps them onto contract clip names and no-ops until the file loads.
 // First-person gloves stay primitive: there is no player body model.
 //
 // PvE shows the Claude-themed bot as authored. PvP reuses the same rig and clips as a
-// human-sized fighter in their corner colour: the orange in its textures is recoloured,
-// the Claude logo is hidden, and it's scaled so both players are eye to eye.
+// human-sized fighter in their corner colour, with its orange textures recoloured.
 
 export type Hand = 'left' | 'right';
 export type AnyPunch = PunchType;
@@ -21,8 +20,7 @@ const HANDS = ['left', 'right'] as const;
 export const cornerOf = (slot: number): Corner => (slot === 0 ? 'red' : 'blue');
 export const CORNER_COLOR: Record<Corner, number> = { red: 0xd63031, blue: 0x2563eb };
 
-const BOT_URL = '/claude_bot.glb';
-const LOGO_MESH = 'path147.001';
+const BOT_URL = '/claude_botv3.glb';
 // Across the ring from the camera at z = 0.55, facing +Z (toward the camera).
 const BOT_POSITION = new THREE.Vector3(0, 0, -2.6);
 // Camera eye is at 1.62 m; the top of the head sits a little above the eyes.
@@ -145,7 +143,7 @@ export class Boxer {
       this.applyLook();
       if (this.down) this.anim.playKo();
     }).catch(err => {
-      console.error('claude_bot.glb failed to load', err);
+      console.error('claude_botv3.glb failed to load', err);
     });
   }
 
@@ -161,7 +159,6 @@ export class Boxer {
     const corner = this.look === 'claude' ? null : this.look;
     const variants = corner ? (this.variants[corner] ??= new Map()) : null;
     for (const { mesh, original } of this.meshes) {
-      mesh.visible = !corner || mesh.name !== LOGO_MESH;
       if (!variants) {
         mesh.material = original;
         continue;
