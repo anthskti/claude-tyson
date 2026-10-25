@@ -41,17 +41,12 @@ export const DEFAULT_ANALYSIS_MODEL = "claude-haiku-4-5-20251001";
 
 const MAX_BODY_BYTES = 32_000;
 
-const SYSTEM_PROMPT = `You are Claude Tyson's corner trainer. You're a gruff, experienced boxing coach who just watched this fight — you know EXACTLY what happened because you were the opponent's AI brain that adapted to beat the player.
+const SYSTEM_PROMPT = `You are Claude Tyson's corner coach. Two sentences MAX. No paragraphs. Talk exactly like a boxing trainer yelling across the corner stool — blunt, vivid, specific.
 
-Write 2–3 short paragraphs. No headers. No bullets. Just talk like a trainer in the corner between rounds — sharp, direct, caring. Under 110 words total.
+First sentence: one sharp observation about what they did (cite the actual numbers if useful — accuracy, punch mix, caught hits).
+Second sentence: one concrete thing to fix next time. Make it stick.
 
-Assess their skill from the data:
-- Beginner (low accuracy, few attempts, short fight): start with fundamentals — guard position, basic jab-straight combos, slipping instead of getting hit. Don't overload them.
-- Intermediate/advanced (decent accuracy, survives full fight, uses variety): go deeper — counterpunching timing, pattern breaks, specific weaknesses you exploited.
-
-You ADAPTED to beat them. Reference what you found and used against them. If you raised defense because their hooks were predictable, say that. Make it feel like the AI genuinely understood their game.
-
-End with one concrete thing to practice next time. Make it stick.`;
+Under 45 words total. If they won, still find the flaw. If they lost, find the silver lining. Never generic.`;
 
 function offlineAnalysis(req: AnalysisRequest): AnalysisResponse {
   const total = req.windows.reduce((s, w) => s + w.playerAttempts, 0);
@@ -62,16 +57,16 @@ function offlineAnalysis(req: AnalysisRequest): AnalysisResponse {
   let text: string;
   if (total < 5) {
     text = won
-      ? "You got there, but I barely saw you throw. You need to commit — jab to find the range, then follow up. Standing back waiting doesn't win fights."
-      : "You didn't throw enough for me to work with. The bot doesn't have to be perfect — it just has to be there when you aren't. Get your hands up, stay active, start with the jab.";
+      ? "Win, but you barely threw — get your hands moving or the next one won't be so easy. Stay active: straight to set range, hook to finish."
+      : "You didn't throw enough for me to read. Hands up, stay active — mix your straights and hooks and make the bot react to you.";
   } else if (rate < 25) {
     text = won
-      ? `You threw ${total} shots and landed ${landed}. That's too low a rate to win consistently — you got lucky this time. Work on timing: don't chase the bot, make it come to you, then counter.`
-      : `You threw ${total} shots and only ${landed} landed. The bot figured out your timing fast. When the same combination stops working, switch it up immediately — jab to disrupt, then change your angle.`;
+      ? `${landed}/${total} landed — too low to rely on. Stop chasing and make the bot come to you, then counter.`
+      : `${landed}/${total} landed — the bot cracked your timing. Switch up combos the moment one stops working.`;
   } else {
     text = won
-      ? `Solid work — ${landed} out of ${total} connected. You read the bot well and stayed composed. Now push that further: after you land a combo, don't reset to the same spot. Move and make the bot adjust to you.`
-      : `You were landing punches — ${landed} out of ${total} — but the bot still found a way through. Your defense breaks down after you commit. The moment you finish a combo, your hands need to come back up. That's the gap it exploited.`;
+      ? `${landed}/${total} connected — solid. After a combo, don't reset to the same spot; move and make the bot guess.`
+      : `${landed}/${total} landed but your hands dropped after each combo — that's the gap it used. Hands back up the instant you finish.`;
   }
   return { text, source: "offline" };
 }
@@ -121,7 +116,7 @@ export async function analyzeWithClaude(req: AnalysisRequest, o: AnalysisOptions
       },
       body: JSON.stringify({
         model: o.model ?? DEFAULT_ANALYSIS_MODEL,
-        max_tokens: 350,
+        max_tokens: 120,
         system: SYSTEM_PROMPT,
         messages: [{
           role: "user",

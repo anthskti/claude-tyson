@@ -9,9 +9,9 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { DbConnection } from "./module_bindings";
 import type { AnalysisRequest, FightWindowSummary } from "../../coach/analysis";
 
-// ── Camera target: inside ring looking toward corner coach ──────────────
-const CORNER_CAM_POS  = new THREE.Vector3(1.6, 1.55, 1.6);   // inside ring, near player corner
-const CORNER_CAM_LOOK = new THREE.Vector3(3.6,  1.1,  3.6);  // looking at crab/placeholder head
+// ── Camera target: side angle from south — crab fills frame, ring+opponent off-screen ─
+const CORNER_CAM_POS  = new THREE.Vector3(3.8, 1.9,  0.8);   // south of crab, elevated
+const CORNER_CAM_LOOK = new THREE.Vector3(3.5, 1.05, 3.5);   // crab midsection/face
 
 // ── Claude placeholder: outside the near-right (blue) ring corner ────────
 const CLAUDE_PLACEHOLDER_POS = new THREE.Vector3(3.6, 0.0, 3.6);
@@ -168,11 +168,6 @@ export class CornerScene {
       }
     }
 
-    // Keep bubble positioned over crab head while visible
-    if (!this.animating && this.bubbleEl.classList.contains("visible")) {
-      this.updateBubblePosition();
-    }
-
     return true; // we own the camera
   }
 
@@ -211,28 +206,7 @@ export class CornerScene {
 
   // ── Private: bubble management ──────────────────────────────────────────
 
-  /** Project the crab/placeholder head world position to screen pixels. */
-  private getCrabHeadScreen(): { x: number; y: number } {
-    const worldPos = new THREE.Vector3(
-      CLAUDE_PLACEHOLDER_POS.x,
-      1.5,
-      CLAUDE_PLACEHOLDER_POS.z
-    );
-    const ndc = worldPos.clone().project(this.camera);
-    const size = this.renderer.getSize(new THREE.Vector2());
-    const x = (ndc.x * 0.5 + 0.5) * size.x;
-    const y = (-(ndc.y * 0.5) + 0.5) * size.y;
-    return { x, y };
-  }
-
-  /** Position the bubble DOM element above the crab head. */
-  private updateBubblePosition(): void {
-    const { x, y } = this.getCrabHeadScreen();
-    this.bubbleEl.style.left = x + "px";
-    this.bubbleEl.style.top = y + "px";
-  }
-
-  /** Show the analysis speech bubble with typewriter text. */
+  /** Show the analysis speech bubble (fixed bottom-center position) with typewriter text. */
   showAnalysisBubble(text: string, source: "claude" | "offline"): void {
     const headerLabel = source === "claude" ? "CLAUDE ANALYSIS" : "CORNER NOTES";
 
@@ -245,7 +219,6 @@ export class CornerScene {
       <button class="wii-bubble-ok">GOT IT</button>
     `;
 
-    this.updateBubblePosition();
     this.bubbleEl.classList.add("visible");
 
     // Wire up the GOT IT button

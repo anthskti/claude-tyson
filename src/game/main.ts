@@ -475,6 +475,9 @@ renderer.setAnimationLoop(() => {
     cinematicMode = cinematic;
     hudState.cinematic = cinematic;
     hud.render(hudState); // show/hide menu immediately when cinematic state changes
+    // Hide the opponent model during the corner coach scene so it doesn't
+    // appear in the background of the cinematic shot.
+    opponent.root.visible = !cinematic;
     if (!cinematic) {
       // Snap camera back to ring-facing position — the corner scene leaves the
       // camera at a corner position with a yaw that the main loop never

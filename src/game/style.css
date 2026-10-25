@@ -747,53 +747,55 @@ code {
 }
 #ai-log-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
 
-/* ─── Wii-style Claude crab analysis bubble ─────────────────────────────── */
+/* ─── Wii-style Claude crab analysis bubble — fixed bottom-center panel ─── */
 .wii-crab-bubble {
   position: fixed;
-  min-width: 260px; max-width: 340px;
-  /* tail anchor = crab head; bubble appears above */
-  transform: translate(-50%, calc(-100% - 26px)) scale(0.75);
+  bottom: 28px;
+  left: 50%;
+  width: min(500px, 90vw);
+  /* hidden state: slide down + fade */
+  transform: translateX(-50%) translateY(20px);
   background: #fff;
-  border-radius: 22px;
+  border-radius: 20px;
   border: 3px solid #111;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 28px rgba(255,100,20,0.25);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.55), 0 0 32px rgba(255,100,20,0.2);
   padding: 0 0 14px;
   opacity: 0;
   pointer-events: none;
   z-index: 300;
-  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1);
+  transition: opacity 0.4s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1);
 }
 .wii-crab-bubble.visible {
   opacity: 1;
-  transform: translate(-50%, calc(-100% - 26px)) scale(1);
+  transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
-/* Tail pointing down toward crab */
+/* Tail pointing UP toward the crab in the 3D scene */
 .wii-crab-bubble::before {
   content: '';
-  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: -18px; left: 38%; transform: translateX(-50%);
   border-left: 13px solid transparent; border-right: 13px solid transparent;
-  border-top: 18px solid #111;
+  border-bottom: 18px solid #111;
 }
 .wii-crab-bubble::after {
   content: '';
-  position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: -11px; left: 38%; transform: translateX(-50%);
   border-left: 10px solid transparent; border-right: 10px solid transparent;
-  border-top: 12px solid #fff;
+  border-bottom: 12px solid #fff;
   z-index: 1;
 }
 /* Orange Claude header */
 .wii-bubble-header {
   background: linear-gradient(135deg, #ff8c42 0%, #e06820 100%);
-  border-radius: 19px 19px 0 0;
+  border-radius: 17px 17px 0 0;
   padding: 10px 16px;
   display: flex; align-items: center; gap: 10px;
 }
 .wii-bubble-icon {
-  width: 30px; height: 30px; flex-shrink: 0;
+  width: 28px; height: 28px; flex-shrink: 0;
   background: #fff; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Lilita One', cursive; font-size: 15px; color: #e06820;
+  font-family: 'Lilita One', cursive; font-size: 14px; color: #e06820;
   box-shadow: 0 2px 6px rgba(0,0,0,0.2);
 }
 .wii-bubble-source {
@@ -801,12 +803,12 @@ code {
   letter-spacing: 0.14em; color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.35);
 }
-/* Body text — Claude chat streaming style */
+/* Body text */
 #wii-text {
-  margin: 12px 16px 10px;
+  margin: 12px 18px 10px;
   font-family: 'Nunito', sans-serif;
-  font-size: 14px; font-weight: 700; line-height: 1.55;
-  color: #111; min-height: 3.5em;
+  font-size: 15px; font-weight: 700; line-height: 1.5;
+  color: #111; min-height: 2.4em;
 }
 /* Blinking orange cursor while streaming */
 .wii-cursor {
