@@ -412,6 +412,10 @@ export class CornerScene {
       });
       if (!res.ok) throw new Error(`${res.status}`);
       const data = (await res.json()) as { text: string; source: "claude" | "offline" };
+      // Persist analysis into SpacetimeDB so profile.lastAnalysis is populated
+      if (data.source === "claude" && conn) {
+        try { conn.reducers.submitFightAnalysis(matchId, data.text); } catch { /* not fatal */ }
+      }
       deliver(data.text, data.source);
     } catch {
       const total = windows.reduce((s, w) => s + w.playerAttempts, 0);
@@ -420,8 +424,8 @@ export class CornerScene {
       let fallback: string;
       if (total < 5) {
         fallback = wonResult
-          ? "You got the win but barely threw anything. Next time stay active — jab to find range, then follow up hard."
-          : "You didn't throw enough for me to work with. Get your hands up, stay active, start with the jab.";
+          ? "You got the win but barely threw anything. Next time stay active — use straights to find range, then follow with the hook."
+          : "You didn't throw enough for me to work with. Get your hands up, stay active, mix straights and hooks.";
       } else {
         const rate = Math.round((landed / total) * 100);
         fallback = wonResult

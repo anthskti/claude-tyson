@@ -38,7 +38,7 @@ import {
 
 // ─── Tuning ────────────────────────────────────────────────────────────────
 
-const MAX_HEALTH = 1000;
+const MAX_HEALTH = 100;
 const ROUND_MS = 180_000;
 const POSE_FRESH_MS = 250;
 const DODGE_WINDOW_MS = 350;
@@ -636,11 +636,11 @@ function finishMatch(ctx: Ctx, match: Match, winnerSlot: number | undefined, rea
       losses: p.losses + (winnerSlot !== undefined && winnerSlot !== f.slot ? 1 : 0),
       leftAttempts: p.leftAttempts + count(mine, a => a.hand === 'left'),
       rightAttempts: p.rightAttempts + count(mine, a => a.hand === 'right'),
-      jabs: p.jabs,
-      straights: p.straights + count(mine, a => a.punchType.endsWith('_straight')),
-      hooks: p.hooks + count(mine, a => a.punchType.endsWith('_hook')),
-      uppercuts: p.uppercuts,
-      unclassified: p.unclassified,
+      jabs: 0,
+      straights: p.straights + count(mine, a => a.punchType.includes('straight')),
+      hooks: p.hooks + count(mine, a => a.punchType.includes('hook')),
+      uppercuts: 0,
+      unclassified: 0,
       punchesLanded: p.punchesLanded + count(mine, a => a.result === 'landed'),
       counters: p.counters + count(mine, a => a.counter && a.result === 'landed'),
       defenseOpportunities: p.defenseOpportunities + incoming.length,
@@ -957,11 +957,11 @@ export const closeWindow = spacetimedb.reducer(
       startAt: timer.windowStart,
       endAt: ctx.timestamp,
       strategyRevision: strat?.revision ?? 0,
-      playerJabs: count(mine, a => a.punchType === 'jab'),
-      playerStraights: count(mine, a => a.punchType === 'straight'),
-      playerHooks: count(mine, a => a.punchType === 'hook'),
-      playerUppercuts: count(mine, a => a.punchType === 'uppercut'),
-      playerUnclassified: count(mine, a => a.punchType === 'unclassified'),
+      playerJabs: 0, // game uses hooks + straights only
+      playerStraights: count(mine, a => a.punchType.includes('straight')),
+      playerHooks: count(mine, a => a.punchType.includes('hook')),
+      playerUppercuts: 0,
+      playerUnclassified: 0,
       playerLeftAttempts: count(mine, a => a.hand === 'left'),
       playerRightAttempts: count(mine, a => a.hand === 'right'),
       playerLanded: count(mine, a => a.result === 'landed'),
