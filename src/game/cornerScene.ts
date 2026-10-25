@@ -413,8 +413,8 @@ export class CornerScene {
       if (!res.ok) throw new Error(`${res.status}`);
       const data = (await res.json()) as { text: string; source: "claude" | "offline" };
       // Persist analysis into SpacetimeDB so profile.lastAnalysis is populated
-      if (data.source === "claude" && conn) {
-        try { conn.reducers.submitFightAnalysis(matchId, data.text); } catch { /* not fatal */ }
+      if (conn) {
+        conn.reducers.submitFightAnalysis({ matchId, analysis: data.text }).catch(() => { /* not fatal */ });
       }
       deliver(data.text, data.source);
     } catch {
@@ -431,6 +431,9 @@ export class CornerScene {
         fallback = wonResult
           ? `You landed ${landed} of ${total} shots and got the job done. Work on consistency — don't reset to the same spot after a combo.`
           : `You threw ${total} punches but only ${rate}% landed. Mix up your timing — when the same combo stops working, change it up immediately.`;
+      }
+      if (conn) {
+        conn.reducers.submitFightAnalysis({ matchId, analysis: fallback }).catch(() => { /* not fatal */ });
       }
       deliver(fallback, "offline");
     }

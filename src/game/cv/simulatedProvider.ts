@@ -56,7 +56,10 @@ export class SimulatedCvProvider implements CvProvider {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
-    this.recalibrate();
+    // Keyboard sim doesn't need physical calibration — mark as ready immediately.
+    // (C key still triggers a manual recalibrate if needed.)
+    this.calibrationId = `sim-cal-${Math.random().toString(36).slice(2, 8)}`;
+    this.calibratingUntil = 0;
     this.lastTick = performance.now();
     this.timer = window.setInterval(() => {
       const now = performance.now();

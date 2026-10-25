@@ -90,7 +90,7 @@ function buildUserPrompt(req: AnalysisRequest): string {
   const lastHealth = req.windows.at(-1)?.playerHealth ?? 100;
   const skill = total < 10 || acc < 20 ? 'beginner' : acc > 40 && req.windows.length >= 4 ? 'advanced' : 'intermediate';
 
-  return `Outcome: ${req.result.won ? 'Claude Tyson WON' : 'player won'} by ${req.result.reason}.
+  return `Outcome: ${req.result.won ? 'player WON' : 'Claude Tyson WON'} by ${req.result.reason}.
 Skill level (inferred): ${skill}
 Total punches thrown: ${total} | landed: ${landed} (${acc}%)
 Punch mix: jabs ${jabs}, straights ${straights}, hooks ${hooks}, uppercuts ${uppers}

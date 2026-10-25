@@ -11,7 +11,7 @@ export interface StrategistOptions {
 }
 
 export const DEFAULT_STRATEGIST_MODEL = "claude-haiku-4-5-20251001";
-const MAX_EXPLANATION_CHARS = 120;
+const MAX_EXPLANATION_CHARS = 130;
 const MAX_BODY_BYTES = 32_000;
 
 export interface StrategistRequest {
@@ -66,46 +66,59 @@ export interface StrategistResponse {
   explanation: string;
 }
 
-const SYSTEM_PROMPT = `You are the AI strategist for Claude Tyson, an adaptive CPU boxer in a webcam boxing game.
-Every 6 seconds you receive a fight window showing how the player attacked, and the current bot settings.
-Your job: adjust the bot behavior knobs to make the fight challenging without being unfair.
+const SYSTEM_PROMPT = `You are the adaptive AI strategist for Claude Tyson, a CPU boxer that reacts to the human player's punch patterns in real-time.
 
-Bot behavior knobs:
-- aggression (0–1): how often the bot initiates attacks
-- punchIntervalMs (600–4000): milliseconds between bot punches (lower = faster)
-- jabWeight/straightWeight/hookWeight/uppercutWeight (0–1 each, unnormalized): punch type distribution
-- leftBias (−1 to +1): −1 = all left-hand punches, +1 = all right-hand, 0 = balanced
-- defenseRate (0–0.8): fraction of incoming punches the bot attempts to block or slip
-- telegraphMs (200–1000): how early (ms before impact) the visual cue appears (lower = harder to react)
+Every 6 seconds you receive a fight window. Your job: mutate the bot's behavior knobs to make the fight harder and expose the player's weaknesses. Be decisive — make meaningful changes, not tiny tweaks.
 
-Counter-triangle (exploit the player's patterns):
-- Player hooking a lot → shift leftBias to attack the opposite side (punish their hook opening)
-- Player throwing many straights → raise defenseRate (make them slip more)
-- Player uppercutting → raise hookWeight (counter the uppercut stance)
-- Player landing high %  → lower telegraphMs or raise aggression to pressure them
-- Player blocked often  → raise aggression, lower defenseRate
+=== BOT PUNCH SYSTEM (hooks + straights only, no jabs or uppercuts) ===
+jabWeight    (0–1): probability weight for LEFT-HAND straights
+straightWeight (0–1): probability weight for RIGHT-HAND straights (power punches)
+hookWeight   (0–1): probability weight for HOOKS on BOTH hands (wide arc, punishes extended arms)
+leftBias (0–1): hand selection — 0=always right-hand, 0.5=balanced, 1=always left-hand
 
-History: if a previous strategy "worsened" or "inconclusive", try a different angle; don't repeat the same change.
-If the window has < 5 player attempts or trackingCoverage < 0.5, set skip=true.
-Keep explanation ≤ ${MAX_EXPLANATION_CHARS} characters. Cite the specific stat that drove the change.`;
+=== OTHER KNOBS ===
+aggression (0–1): how often bot initiates attacks. 0.8+ = relentless pressure.
+punchIntervalMs (600–4000): ms between bot punches. 600=very fast, 1600=default.
+defenseRate (0–0.8): fraction of incoming punches bot slips or blocks.
+telegraphMs (350–1200): ms before impact the visual cue appears. Lower = harder to react.
+
+=== COUNTER-TRIANGLE: how to exploit punch patterns ===
+• Player throwing >55% straights → raise hookWeight (hooks beat straight-arm extension)
+• Player throwing >55% hooks     → raise jabWeight + straightWeight, lower hookWeight (straights beat hook openings)
+• Player landing rate > 55%      → lower telegraphMs by 100–150ms AND raise defenseRate by 0.1
+• Player landing rate > 55% and playerCaught > 3 → raise aggression (punish recovery gaps)
+• Player landing rate < 25%      → raise aggression 0.15, keep defenseRate low (dominant bot presses advantage)
+• Player attempts low but landing high → raise telegraphMs (give them readable cues, keep fight fair)
+• leftBias tip: attack the side where player's guard is weaker (default 0.5 balanced)
+
+=== HISTORY RULE ===
+• If previous strategy "worsened": change a DIFFERENT knob, or reverse direction.
+• If "inconclusive" twice in a row: make a larger change (±0.2 aggression, ±250ms interval).
+• If "improved": you may skip or make only a small tightening move.
+
+=== SKIP RULES (set skip=true) ===
+• playerAttempts < 5
+• trackingCoverage < 0.5
+• All proposed knob changes would be < 0.05 / 50ms from current values
+
+Keep explanation ≤ ${MAX_EXPLANATION_CHARS} chars. Quote the exact stat (e.g., "hooks 63%, raising straight weights").`;
 
 function tool() {
   return {
     name: "update_strategy",
-    description: "Update the bot strategy, or skip if already working or data is insufficient.",
+    description: "Update the bot strategy knobs, or skip if data is insufficient or strategy is already working.",
     input_schema: {
       type: "object",
       properties: {
-        skip: { type: "boolean", description: "true if strategy needs no change or data is insufficient" },
-        aggression: { type: "number", minimum: 0, maximum: 1 },
-        punchIntervalMs: { type: "number", minimum: 600, maximum: 4000 },
-        jabWeight: { type: "number", minimum: 0, maximum: 1 },
-        straightWeight: { type: "number", minimum: 0, maximum: 1 },
-        hookWeight: { type: "number", minimum: 0, maximum: 1 },
-        uppercutWeight: { type: "number", minimum: 0, maximum: 1 },
-        leftBias: { type: "number", minimum: -1, maximum: 1 },
-        defenseRate: { type: "number", minimum: 0, maximum: 0.8 },
-        telegraphMs: { type: "number", minimum: 200, maximum: 1000 },
+        skip: { type: "boolean", description: "true if no change needed or data insufficient" },
+        aggression: { type: "number", minimum: 0, maximum: 1, description: "attack initiation frequency" },
+        punchIntervalMs: { type: "number", minimum: 600, maximum: 4000, description: "ms between bot punches" },
+        jabWeight: { type: "number", minimum: 0, maximum: 1, description: "left-hand straight probability weight" },
+        straightWeight: { type: "number", minimum: 0, maximum: 1, description: "right-hand straight probability weight" },
+        hookWeight: { type: "number", minimum: 0, maximum: 1, description: "hook probability weight for both hands" },
+        leftBias: { type: "number", minimum: 0, maximum: 1, description: "hand bias: 0=always right, 0.5=balanced, 1=always left" },
+        defenseRate: { type: "number", minimum: 0, maximum: 0.8, description: "fraction of incoming punches bot slips/blocks" },
+        telegraphMs: { type: "number", minimum: 350, maximum: 1200, description: "ms before impact visual cue appears" },
         explanation: {
           type: "string",
           description: `≤${MAX_EXPLANATION_CHARS} chars: what changed and why (cite a stat)`,
@@ -113,7 +126,7 @@ function tool() {
       },
       required: [
         "skip", "aggression", "punchIntervalMs", "jabWeight", "straightWeight",
-        "hookWeight", "uppercutWeight", "leftBias", "defenseRate", "telegraphMs", "explanation",
+        "hookWeight", "leftBias", "defenseRate", "telegraphMs", "explanation",
       ],
     },
   };
@@ -180,10 +193,10 @@ export async function coachWithStrategist(req: StrategistRequest, o: StrategistO
       jabWeight: clamp(Number(inp.jabWeight ?? req.strategy.jabWeight), 0, 1),
       straightWeight: clamp(Number(inp.straightWeight ?? req.strategy.straightWeight), 0, 1),
       hookWeight: clamp(Number(inp.hookWeight ?? req.strategy.hookWeight), 0, 1),
-      uppercutWeight: clamp(Number(inp.uppercutWeight ?? req.strategy.uppercutWeight), 0, 1),
-      leftBias: clamp(Number(inp.leftBias ?? req.strategy.leftBias), -1, 1),
+      uppercutWeight: 0,
+      leftBias: clamp(Number(inp.leftBias ?? req.strategy.leftBias), 0, 1),
       defenseRate: clamp(Number(inp.defenseRate ?? req.strategy.defenseRate), 0, 0.8),
-      telegraphMs: Math.round(clamp(Number(inp.telegraphMs ?? req.strategy.telegraphMs), 200, 1000)),
+      telegraphMs: Math.round(clamp(Number(inp.telegraphMs ?? req.strategy.telegraphMs), 350, 1200)),
       explanation,
     };
   } catch (e) {

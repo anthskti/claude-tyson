@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import '../game/style.css';
 
 export const metadata: Metadata = {
   title: 'Claude Tyson',

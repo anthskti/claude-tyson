@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import '../game/style.css';
 
 export default function FightPage() {
   useEffect(() => {
