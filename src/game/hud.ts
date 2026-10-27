@@ -235,7 +235,7 @@ export class Hud {
     const name = s.playerName ?? 'FIGHTER';
     const nameHtml = `<div class="menu-player-name">${escapeHtml(name)} <button class="profile-change-name" data-action="changeName">change name</button></div>`;
     return `
-      <div class="menu-title"><span class="t-claude">CLAUDE</span><span class="t-tyson">TYSON</span></div>
+      <div class="menu-title"><span class="t-claude">SPACETIME</span><span class="t-tyson">DOJO</span></div>
       ${resultHtml}
       ${this.inputPicker(s)}
       <div class="buttons">
@@ -443,7 +443,7 @@ export class Hud {
   showNameEntry(onSubmit: (name: string) => void) {
     const screen = el('name-entry-screen');
     screen.innerHTML = `
-      <div class="ne-logo">🥊 CLAUDE TYSON</div>
+      <div class="ne-logo">SPACETIME DOJO</div>
       <div class="ne-prompt">WHAT'S YOUR<br>FIGHTER NAME?</div>
       <input class="ne-input" type="text" placeholder="YOUR NAME" maxlength="16"
              autocomplete="off" spellcheck="false">
